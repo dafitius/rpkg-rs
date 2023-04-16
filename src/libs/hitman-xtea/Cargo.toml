@@ -1,0 +1,22 @@
+[package]
+name = "hitman-xtea"
+version = "0.1.0"
+authors = ["A.W. Stanley <aws@reversing.space>"]
+edition = "2018"
+license = "Zlib"
+publish = false
+
+description = """
+Simple XTEA implementation for Hitman (2016) and Hitman 2 (2018) #[no_std]
+"""
+
+include = [
+    "src/lib.rs",
+    "Cargo.toml",
+    "CHANGES.md",
+    "README.md",
+]
+
+[features]
+default = []
+file-helpers = []
