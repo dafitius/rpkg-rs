@@ -1,5 +1,6 @@
 use std::fmt;
-use crate::resource_package::{PackageOffsetInfo, ResourceHeader};
+
+use super::{resource_package::*, resource_index::ResourceIndex};
 
 pub struct ResourceInfo
 {
@@ -8,7 +9,7 @@ pub struct ResourceInfo
     pub size : u32,
     pub is_lz4ed : bool,
     pub is_scrambled: bool,
-    pub last_index: Option<usize>,
+    pub next_newest_index: Option<ResourceIndex>,
 }
 
 impl fmt::Display for ResourceInfo {

@@ -1,7 +1,7 @@
-use binrw::{BinRead};
+use binrw::BinRead;
 use std::hash::Hash;
 
-#[derive(BinRead, Default, PartialEq, Eq, Hash, Clone)]
+#[derive(BinRead, Default, PartialEq, Eq, Hash, Clone, Copy)]
 pub struct RuntimeResourceID
 {
     pub id: u64

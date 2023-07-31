@@ -1,7 +1,8 @@
 use std::fmt;
-use binrw::{BinRead};
+use binrw::BinRead;
 use modular_bitfield::prelude::*;
-use crate::runtime_resource_id::RuntimeResourceID;
+
+use crate::runtime::resource::runtime_resource_id::RuntimeResourceID;
 
 #[allow(dead_code)]
 #[derive(BinRead)]
