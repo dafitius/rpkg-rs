@@ -20,7 +20,7 @@ pub struct ResourcePackage {
     unneeded_resource_count: u32,
 
     #[br(if(is_patch))]
-    #[br(little, count = deletion_list_count)]
+    #[br(little, count = unneeded_resource_count)]
     pub unneeded_resources: Option<Vec<RuntimeResourceID>>,
 
     #[br(little, count = header.file_count)]

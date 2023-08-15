@@ -30,13 +30,8 @@ impl ResourceID {
     }
 
     pub fn get_inner_most_resource_path(&self) -> Option<String> {
-        let mut open_count = self.uri.chars().filter(|c| *c == '[').count();
-        match self.uri.find(']'){
-            Some(n) => {
-                Some(self.uri.chars().skip(open_count).take(n-1).collect())
-            },
-            None => {None}
-        }
+        let open_count = self.uri.chars().filter(|c| *c == '[').count();
+        self.uri.find(']').map(|n| self.uri.chars().skip(open_count).take(n-1).collect())
     }
 
     fn find_matching_parentheses(str: &str, start_index: usize, open: char, close: char) -> Option<usize> {
