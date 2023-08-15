@@ -89,7 +89,7 @@ impl ResourceContainer {
         let rpkg: ResourcePackage = reader.read_ne_args((is_patch,)).unwrap();
 
         //remove the deletions if there are any
-        if let Some(deletions) = rpkg.deletion_list {
+        if let Some(deletions) = rpkg.unneeded_resources {
             for deletion in deletions.iter() {
                 //This doesn't fix the next_newest_index breaking yet.
                 if let Some(idx) = self.indices.get(deletion){
@@ -161,3 +161,5 @@ impl fmt::Display for ResourceContainer {
         Ok(())
     }
 }
+
+

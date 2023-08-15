@@ -1,6 +1,7 @@
-use std::fs;
+use std::{fs, io};
 use std::fs::File;
-use std::io::Read;
+use std::io::{BufRead, Read};
+use std::path::Path;
 use anyhow::Error;
 
 pub fn get_file_as_byte_vec(filename: &str) -> Result<Vec<u8>, Error> {
@@ -19,5 +20,10 @@ pub fn get_file_as_byte_vec(filename: &str) -> Result<Vec<u8>, Error> {
     else {
         Err(anyhow::anyhow!("no file found"))
     }
-    
+}
+
+pub fn read_lines<P>(filename: P) -> io::Result<io::Lines<io::BufReader<File>>>
+    where P: AsRef<Path>, {
+    let file = File::open(filename)?;
+    Ok(io::BufReader::new(file).lines())
 }

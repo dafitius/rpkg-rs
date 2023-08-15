@@ -17,11 +17,11 @@ pub struct ResourcePackage {
     pub header: PackageHeader,
 
     #[br(if(is_patch))]
-    deletion_list_count: u32,
+    unneeded_resource_count: u32,
 
     #[br(if(is_patch))]
     #[br(little, count = deletion_list_count)]
-    pub deletion_list: Option<Vec<RuntimeResourceID>>,
+    pub unneeded_resources: Option<Vec<RuntimeResourceID>>,
 
     #[br(little, count = header.file_count)]
     pub resource_entries: Vec<PackageOffsetInfo>,

@@ -1,5 +1,9 @@
+use std::fs::File;
+use std::io::Write;
+
 use std::time::Instant;
 use anyhow::{anyhow, Error};
+use rpkg_rs::misc::hash_path_list::PathList;
 use rpkg_rs::misc::ini_file::IniFile;
 use rpkg_rs::runtime::resource::package_manager::PackageManager;
 use rpkg_rs::runtime::resource::resource_container::ResourceContainer;
@@ -7,12 +11,8 @@ use rpkg_rs::runtime::resource::resource_container::ResourceContainer;
 fn main() -> Result<(), Error> {
     let now = Instant::now();
 
-    // println!("Start reading the hashlist");
-    // let hash_list_timer = Instant::now();
-    // let path_list_path = "D:\\HitmanProjects\\Tools\\rpkgtools2.24\\hash_list.txt";
-    // let mut path_list = PathList::new();
-    // path_list.parse_into(path_list_path).unwrap();
-    // println!("Read the hash list in: {} ms", hash_list_timer.elapsed().as_millis());
+    // println!("{:?}", path_list.get_files("assembly:/_pro/scenes/bricks"));
+    // println!("{:?}", path_list.get_folders("assembly:/_pro/scenes/bricks"));
 
     let retail_path = "D:\\Steam\\steamapps\\common\\HITMAN 3\\retail";
     let thumbs_path = format!("{retail_path}\\thumbs.dat");
