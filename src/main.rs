@@ -1,8 +1,6 @@
-
-
-
 use std::time::Instant;
 use anyhow::{anyhow, Error};
+use rpkg_rs::misc::hash_path_list::PathList;
 
 use rpkg_rs::misc::ini_file::IniFile;
 use rpkg_rs::runtime::resource::package_manager::PackageManager;
@@ -11,8 +9,17 @@ use rpkg_rs::runtime::resource::resource_container::ResourceContainer;
 fn main() -> Result<(), Error> {
     let now = Instant::now();
 
-    // println!("{:?}", path_list.get_files("assembly:/_pro/scenes/bricks"));
-    // println!("{:?}", path_list.get_folders("assembly:/_pro/scenes/bricks"));
+    let mut path_list = PathList::new();
+
+    match path_list.parse_into(r"D:\David\Hitman-modding\Tools\rpkgTools\2.25\hash_list.txt", true) {
+        Ok(_) => {
+            println!("{}", now.elapsed().as_nanos());
+            for path in path_list.get_all_folders() {
+                println!("{}", path);
+            };
+        }
+        Err(_) => {}
+    };
 
     let retail_path = "D:\\Steam\\steamapps\\common\\HITMAN 3\\retail";
     let thumbs_path = format!("{retail_path}\\thumbs.dat");

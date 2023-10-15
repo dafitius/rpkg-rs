@@ -1,5 +1,6 @@
-use regex::Regex;
 use serde::Serialize;
+use crate::runtime::resource::runtime_resource_id::RuntimeResourceID;
+use crate::encryption::md5_engine::Md5Engine;
 
 #[derive(Serialize, Clone, Debug)]
 pub struct ResourceID
@@ -31,7 +32,12 @@ impl ResourceID {
 
     pub fn get_inner_most_resource_path(&self) -> Option<String> {
         let open_count = self.uri.chars().filter(|c| *c == '[').count();
-        self.uri.find(']').map(|n| self.uri.chars().skip(open_count).take(n-1).collect())
+        match self.uri.find(']'){
+            Some(n) => {
+                Some(self.uri.chars().skip(open_count).take(n-1).collect())
+            },
+            None => {None}
+        }
     }
 
     fn find_matching_parentheses(str: &str, start_index: usize, open: char, close: char) -> Option<usize> {
@@ -71,12 +77,31 @@ impl ResourceID {
         None
     }
 
+    pub fn get_path(&self) -> Option<String>{
+        let path: String = self.uri.chars().skip(1).collect();
+        if let Some(n) = path.rfind('/'){
+            let p: String = path.chars().take(n).collect();
+            if !p.contains('.') {
+                return Some(p);
+            }
+        }
+        return None;
+    }
+
     pub fn is_empty(&self) -> bool {
         self.uri.is_empty()
     }
 
     pub fn is_valid(&self) -> bool {
-        let re = Regex::new(r"\[([A-z:/.0-9?]+)]([\([A-z,0-9]+\)]+)?.pc_[A-z]+").unwrap();
-        re.is_match(&self.uri)
+        {
+            !self.uri.contains("unknown") &&
+                !self.uri.contains("*") &&
+                self.uri.starts_with('[') &&
+                self.uri.contains("].pc_")
+        }
+    }
+
+    pub fn is_valid_rrid(&self, rrid: RuntimeResourceID) -> bool {
+        Md5Engine::compute(&self.uri) == rrid.id
     }
 }
