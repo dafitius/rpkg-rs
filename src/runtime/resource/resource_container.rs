@@ -24,7 +24,6 @@ pub struct ResourceContainer {
 }
 
 impl ResourceContainer {
-
     pub fn get_patch_indices(package_dir: &str, index: usize) -> Result<Vec<u16>, Error> {
         let mut patch_indices = vec![];
 
@@ -75,7 +74,7 @@ impl ResourceContainer {
             "chunk{} has patch levels: {:?}",
             partition_info.index, patch_indices
         );
-        println!("rpkg file contains {} Resources", self.indices.len());
+        println!("partition contains {} Resources", self.indices.len());
         Ok(())
     }
 

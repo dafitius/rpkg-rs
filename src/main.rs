@@ -9,18 +9,17 @@ use rpkg_rs::runtime::resource::resource_container::ResourceContainer;
 fn main() -> Result<(), Error> {
     let now = Instant::now();
 
+    /// hashlist tests
     let mut path_list = PathList::new();
 
-    match path_list.parse_into(r"D:\David\Hitman-modding\Tools\rpkgTools\2.25\hash_list.txt", true) {
-        Ok(_) => {
-            println!("{}", now.elapsed().as_nanos());
-            for path in path_list.get_all_folders() {
-                println!("{}", path);
-            };
-        }
-        Err(_) => {}
-    };
+    // if let Ok(_) = path_list.parse_into("D:\\HitmanProjects\\Tools\\rpkgtools2.24\\hash_list.txt",false){
+    //
+    //     println!("{:?}", path_list.get_files("assembly:/_pro/scenes/bricks"));
+    //     println!("{:?}", path_list.get_folders("assembly:/_pro/scenes/bricks"));
+    //
+    // }
 
+    /// reading partitions (thumbs->packagedefs->rpkgs)
     let retail_path = "D:\\Steam\\steamapps\\common\\HITMAN 3\\retail";
     let thumbs_path = format!("{retail_path}\\thumbs.dat");
 
@@ -33,17 +32,12 @@ fn main() -> Result<(), Error> {
         let runtime_path = format!("{retail_path}\\{proj_path}\\{relative_runtime_path}");
         std::println!("start reading package definitions {runtime_path}");
         let mut package_manager = PackageManager::new(&runtime_path);
-        println!("{}", serde_json::to_string_pretty(&package_manager.partition_infos).unwrap());
+        //println!("{}", serde_json::to_string_pretty(&package_manager.partition_infos).unwrap());
 
-        let mut resource_container : ResourceContainer = ResourceContainer::default();
-        package_manager.initialize(&mut resource_container)?;
-
+         let mut resource_container : ResourceContainer = ResourceContainer::default();
+         package_manager.initialize(&mut resource_container)?;
         println!("{}", resource_container);
-        // println!();
-        // let mut resources = vec![];
-        // let mut partition_manager = PartitionManager::default();
-        // partition_manager.parse_into(&package_definitions, runtime_path.as_str(), &mut resources);
-        // print_resource_journey(0x00EE6B9C45CC038F, &partition_manager, &resources);
+
     } else {
         return Err(anyhow!("Missing required properties inside thumbs.dat: \n\
         PROJECT_PATH: {},\n\
