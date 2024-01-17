@@ -4,6 +4,7 @@ use modular_bitfield::prelude::*;
 
 use crate::runtime::resource::runtime_resource_id::RuntimeResourceID;
 
+
 #[allow(dead_code)]
 #[derive(BinRead)]
 #[br(import(is_patch: bool))]
@@ -69,6 +70,7 @@ impl PackageOffsetInfo{
 
 
 #[allow(dead_code)]
+#[cfg_attr(feature="serde", derive(serde::Serialize))]
 #[derive(BinRead)]
 pub struct ResourceHeader
 {
@@ -81,10 +83,10 @@ pub struct ResourceHeader
 
     #[br(if(references_chunk_size > 0))]
     pub m_references : Option<ResourceReferences>
-
 }
 
 #[allow(dead_code)]
+#[cfg_attr(feature="serde", derive(serde::Serialize))]
 #[derive(BinRead)]
 pub struct ResourceReferences
 {
@@ -98,6 +100,7 @@ pub struct ResourceReferences
 }
 
 #[bitfield]
+#[cfg_attr(feature="serde", derive(serde::Serialize))]
 #[derive(BinRead)]
 #[br(map = Self::from_bytes)]
 pub struct ResourceReferenceFlags

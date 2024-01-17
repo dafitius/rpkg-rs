@@ -1,11 +1,6 @@
 use anyhow::Error;
-use std::collections::{HashMap, HashSet};
-use rayon::prelude::ParallelBridge;
-use rayon::iter::ParallelIterator;
-use crate::runtime::resource::runtime_resource_id::RuntimeResourceID;
-use crate::utils;
-
-use super::resource_id::ResourceID;
+use std::collections::{HashMap};
+use std::fs;
 
 #[derive(Default)]
 pub struct PathList {
@@ -13,14 +8,13 @@ pub struct PathList {
 }
 
 impl PathList {
-    pub fn new() -> Self {
-        Self {
-            entries: HashMap::new(),
-        }
+    pub fn new() -> Self
+    {
+        Self { entries: HashMap::new() }
     }
 
     pub fn parse_into(&mut self, path: &str, check_md5: bool) -> Result<&Self, Error> {
-        let lines = utils::read_lines(path).ok().unwrap();
+        let mut entries: HashMap<RuntimeResourceID, Option<ResourceID>> = HashMap::new();
 
         let pairs: Vec<Option<(RuntimeResourceID, Option<ResourceID>)>> = lines.par_bridge().map(|line_res| -> Option<(RuntimeResourceID, Option<ResourceID>)> {
             let binding = line_res.unwrap();
@@ -55,13 +49,14 @@ impl PathList {
                 self.entries.insert(key, value);
             }
         }
+        self.entries = entries;
         Ok(self)
     }
     pub fn get_resource_id(&self, key: &RuntimeResourceID) -> Option<&ResourceID>
     {
-        if let Some(value) = self.entries.get(key) {
-            if let Some(path) = value {
-                return Some(path);
+        if let Some(value) = self.entries.get(key){
+            if let Some(path) = value{
+                return Some(path)
             }
             return None;
         }

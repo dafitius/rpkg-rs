@@ -1,16 +1,15 @@
-use serde::Serialize;
 use crate::runtime::resource::runtime_resource_id::RuntimeResourceID;
-use crate::encryption::md5_engine::Md5Engine;
 
-#[derive(Serialize, Clone, Debug)]
+#[derive(Clone, Debug)]
+#[cfg_attr(feature="serde", derive(serde::Serialize))]
 pub struct ResourceID
 {
     pub uri: String,
 }
 
-impl ResourceID {
+impl ResourceID{
     pub fn from_string(source: &str) -> Self {
-        Self {
+        Self{
             uri: source.to_string()
         }
     }
@@ -32,12 +31,7 @@ impl ResourceID {
 
     pub fn get_inner_most_resource_path(&self) -> Option<String> {
         let open_count = self.uri.chars().filter(|c| *c == '[').count();
-        match self.uri.find(']'){
-            Some(n) => {
-                Some(self.uri.chars().skip(open_count).take(n-1).collect())
-            },
-            None => {None}
-        }
+        self.uri.find(']').map(|n| self.uri.chars().skip(open_count).take(n-1).collect())
     }
 
     fn find_matching_parentheses(str: &str, start_index: usize, open: char, close: char) -> Option<usize> {
@@ -85,7 +79,7 @@ impl ResourceID {
                 return Some(p);
             }
         }
-        return None;
+        None
     }
 
     pub fn is_empty(&self) -> bool {
@@ -95,13 +89,13 @@ impl ResourceID {
     pub fn is_valid(&self) -> bool {
         {
             !self.uri.contains("unknown") &&
-                !self.uri.contains("*") &&
+                !self.uri.contains('*') &&
                 self.uri.starts_with('[') &&
                 self.uri.contains("].pc_")
         }
     }
 
-    pub fn is_valid_rrid(&self, rrid: RuntimeResourceID) -> bool {
-        Md5Engine::compute(&self.uri) == rrid.id
+    pub fn to_rrid(&self) -> RuntimeResourceID {
+        RuntimeResourceID::from_resource_id(self)
     }
 }

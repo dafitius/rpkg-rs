@@ -7,6 +7,7 @@ use std::fs::File;
 use std::io::Cursor;
 use std::iter::zip;
 use std::{collections::HashMap, fs, path::Path};
+use std::path::PathBuf;
 
 use crate::runtime::resource::resource_package::ResourcePackage;
 
@@ -17,24 +18,25 @@ use super::runtime_resource_id::RuntimeResourceID;
 
 #[derive(Default)]
 pub struct ResourceContainer {
-    resources: Vec<ResourceInfo>,
-    old_versions: Vec<ResourceIndex>,
-    indices: HashMap<RuntimeResourceID, ResourceIndex>,
+    pub resources: Vec<ResourceInfo>,
+    pub old_versions: Vec<ResourceIndex>,
+    pub indices: HashMap<RuntimeResourceID, ResourceIndex>,
     //dynamic_resources: Vec<RuntimeResourceID>,
 }
 
 impl ResourceContainer {
-    pub fn get_patch_indices(package_dir: &str, index: usize) -> Result<Vec<u16>, Error> {
+
+    pub fn get_patch_indices(package_dir: &PathBuf, index: usize) -> Result<Vec<u16>, Error> {
         let mut patch_indices = vec![];
 
-        if !Path::new(format!("{}\\chunk{}.rpkg", package_dir, index).as_str()).exists() {
+        if !package_dir.join(format!("chunk{}.rpkg", index)).exists() {
             return Err(anyhow!(
                 "The base package was not found, stopped attempting to find patches"
             ));
         }
 
-        let regex_str = format!("{}\\chunk{}patch([0-9]+).rpkg", package_dir, index)
-            .as_str()
+        let regex_str = package_dir.join(format!("chunk{}patch([0-9]+).rpkg", index))
+            .as_os_str().to_str().unwrap_or("")
             .replace('\\', "\\\\");
         let patch_package_re = Regex::new(regex_str.as_str()).unwrap();
         for path_buf in fs::read_dir(package_dir)?
@@ -55,34 +57,33 @@ impl ResourceContainer {
     pub fn mount_partition(
         &mut self,
         partition_info: &PartitionInfo,
-        runtime_path: &str,
+        runtime_path: &PathBuf,
     ) -> Result<(), Error> {
         let patch_indices = Self::get_patch_indices(runtime_path, partition_info.index)?;
 
-        let base_package_path = format!("{}\\chunk{}.rpkg", runtime_path, partition_info.index);
-        self.mount_package(base_package_path.as_str(), false)?;
+        let base_package_path = runtime_path.join(format!("chunk{}.rpkg", partition_info.index));
+        self.mount_package(base_package_path.as_path(), false)?;
 
         for patch_index in patch_indices.iter() {
-            let patch_package_path = format!(
-                "{}\\chunk{}patch{}.rpkg",
-                runtime_path, partition_info.index, patch_index
+            let patch_package_path = runtime_path.join(format!(
+                "chunk{}patch{}.rpkg", partition_info.index, patch_index)
             );
-            self.mount_package(patch_package_path.as_str(), true)?;
+            self.mount_package(patch_package_path.as_path(), true)?;
         }
 
         println!(
             "chunk{} has patch levels: {:?}",
             partition_info.index, patch_indices
         );
-        println!("partition contains {} Resources", self.indices.len());
+        println!("rpkg file contains {} Resources", self.indices.len());
         Ok(())
     }
 
-    fn mount_package(&mut self, package_path: &str, is_patch: bool) -> Result<(), Error> {
+    fn mount_package(&mut self, package_path: &Path, is_patch: bool) -> Result<(), Error> {
         let file = File::open(package_path)?;
         let mmap = unsafe { Mmap::map(&file)? };
 
-        std::println!("Start reading {package_path}");
+        std::println!("Start reading {:?}", package_path);
 
         let mut reader = Cursor::new(&mmap[..]);
         let rpkg: ResourcePackage = reader.read_ne_args((is_patch,)).unwrap();
@@ -160,5 +161,3 @@ impl fmt::Display for ResourceContainer {
         Ok(())
     }
 }
-
-
