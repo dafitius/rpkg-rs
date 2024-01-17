@@ -1,8 +1,18 @@
 use std::fmt;
 use binrw::BinRead;
 use std::hash::Hash;
+use thiserror::Error;
 use crate::encryption::md5_engine::Md5Engine;
 use crate::misc::resource_id::ResourceID;
+
+#[derive(Error, Debug)]
+pub enum RuntimeResourceIDError {
+    #[error("{} can't represent a valid runtimeResourceID", _0)]
+    InvalidID(u64),
+
+    #[error("Cannot parse {} to a runtimeResourceID", _0)]
+    ParseError(String),
+}
 
 #[derive(BinRead, Default, PartialEq, Eq, Hash, Clone, Copy)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
@@ -32,17 +42,17 @@ impl RuntimeResourceID {
         }
     }
 
-    pub fn from_hex_string(str: &str) -> Result<Self, Self> {
+    pub fn from_hex_string(str: &str) -> Result<Self, RuntimeResourceIDError> {
         match str.parse::<u64>() {
             Ok(num) => {
                 let rrid = RuntimeResourceID{id:num};
                 if !rrid.is_valid() {
-                    Err(rrid)
+                    Err(RuntimeResourceIDError::InvalidID(num))
                 } else {
                     Ok(rrid)
                 }
             }
-            Err(_) => Err(RuntimeResourceID::invalid())
+            Err(_) => Err(RuntimeResourceIDError::ParseError(str.to_string())),
         }
     }
 }

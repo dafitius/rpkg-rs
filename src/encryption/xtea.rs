@@ -1,5 +1,16 @@
-use anyhow::{anyhow, Error};
 use hitman_xtea::{self, CipherError};
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum XteaError {
+    #[error("Text encoding error: {0}")]
+    TextEncodingError(#[from] std::string::FromUtf8Error),
+
+    #[error("An error occurred while trying to decrypt the file: {:?}", _0)]
+    DecryptionError(CipherError),
+
+    // Add more error variants as needed
+}
 
 //Custom wrapper for the hitman_xtea module
 pub struct Xtea;
@@ -32,19 +43,27 @@ impl Xtea {
         hitman_xtea::decipher(data, Self::DELTA, Self::DEFAULT_NUMBER_OF_ROUNDS, key)
     }
 
-    pub fn decrypt_text_file(input_buffer: &Vec<u8>, key: &[u32; 4]) -> Result<String, Error>{
-        match hitman_xtea::decipher_file(input_buffer.as_slice(), Self::DELTA, Self::DEFAULT_ENCRYPTED_HEADER.as_slice(), Self::DEFAULT_NUMBER_OF_ROUNDS, key){
-            Ok(bytes) => {
-            match String::from_utf8(bytes){
-                Ok(v) => {Ok(v)},
-                Err(e) => {Err(anyhow!("Text encoding error: {}", e))}
-            }},
-            Err(e) => {Err(anyhow!("An error occured try to decrypt the file: {:?}", e))}
-        } 
+    pub fn decrypt_text_file(input_buffer: &Vec<u8>, key: &[u32; 4]) -> Result<String, XteaError>{
+
+        let bytes = hitman_xtea::decipher_file(
+            input_buffer.as_slice(),
+            Self::DELTA,
+            Self::DEFAULT_ENCRYPTED_HEADER.as_slice(),
+            Self::DEFAULT_NUMBER_OF_ROUNDS,
+            key,
+        ).map_err(XteaError::DecryptionError)?;
+
+        String::from_utf8(bytes).map_err(XteaError::TextEncodingError)
     }
 
-    pub fn encrypt_text_file(input_string: String, key: &[u32; 4]) -> Result<Vec<u8>, CipherError>{
-        hitman_xtea::encipher_file(input_string.as_bytes(), Self::DELTA, Self::DEFAULT_ENCRYPTED_HEADER.as_slice(), Self::DEFAULT_NUMBER_OF_ROUNDS, key)
+    pub fn encrypt_text_file(input_string: String, key: &[u32; 4]) -> Result<Vec<u8>, XteaError>{
+        hitman_xtea::encipher_file(
+            input_string.as_bytes(),
+            Self::DELTA,
+            Self::DEFAULT_ENCRYPTED_HEADER.as_slice(),
+            Self::DEFAULT_NUMBER_OF_ROUNDS,
+            key
+        ).map_err(XteaError::DecryptionError)
     }
 
     // pub fn decrypt_string(input_buffer: Vec<u8>, key: &[u32; 4]) {

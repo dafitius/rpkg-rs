@@ -1,4 +1,3 @@
-use anyhow::{anyhow, Error};
 use binrw::BinReaderExt;
 use memmap2::Mmap;
 use regex::Regex;
@@ -8,6 +7,7 @@ use std::io::Cursor;
 use std::iter::zip;
 use std::{collections::HashMap, fs, path::Path};
 use std::path::PathBuf;
+use thiserror::Error;
 
 use crate::runtime::resource::resource_package::ResourcePackage;
 
@@ -15,6 +15,27 @@ use super::package_manager::PartitionInfo;
 use super::resource_info::ResourceInfo;
 use super::resource_index::ResourceIndex;
 use super::runtime_resource_id::RuntimeResourceID;
+
+
+#[derive(Debug, Error)]
+pub enum ResourceContainerError {
+    #[error("Failed to open file: {0}")]
+    IoError(#[from] std::io::Error),
+
+    #[error("Error while reading ResourcePackage: {0}")]
+    ReadResourcePackageError(#[from] binrw::Error),
+
+    #[error("Failed to parse patch index as u16: {0}")]
+    ParsePatchIndexError(#[from] std::num::ParseIntError),
+
+    #[error("Base package not found: {0}")]
+    BasePackageNotFound(String),
+
+    #[error("Failed to read package: {0}")]
+    ReadPackageError(String),
+
+    // Add more error variants as needed
+}
 
 #[derive(Default)]
 pub struct ResourceContainer {
@@ -26,13 +47,11 @@ pub struct ResourceContainer {
 
 impl ResourceContainer {
 
-    pub fn get_patch_indices(package_dir: &PathBuf, index: usize) -> Result<Vec<u16>, Error> {
+    pub fn get_patch_indices(package_dir: &PathBuf, index: usize) -> Result<Vec<u16>, ResourceContainerError> {
         let mut patch_indices = vec![];
 
         if !package_dir.join(format!("chunk{}.rpkg", index)).exists() {
-            return Err(anyhow!(
-                "The base package was not found, stopped attempting to find patches"
-            ));
+            return Err(ResourceContainerError::BasePackageNotFound(format!("chunk{}.rpkg", index)));
         }
 
         let regex_str = package_dir.join(format!("chunk{}patch([0-9]+).rpkg", index))
@@ -58,7 +77,7 @@ impl ResourceContainer {
         &mut self,
         partition_info: &PartitionInfo,
         runtime_path: &PathBuf,
-    ) -> Result<(), Error> {
+    ) -> Result<(), ResourceContainerError> {
         let patch_indices = Self::get_patch_indices(runtime_path, partition_info.index)?;
 
         let base_package_path = runtime_path.join(format!("chunk{}.rpkg", partition_info.index));
@@ -79,7 +98,7 @@ impl ResourceContainer {
         Ok(())
     }
 
-    fn mount_package(&mut self, package_path: &Path, is_patch: bool) -> Result<(), Error> {
+    fn mount_package(&mut self, package_path: &Path, is_patch: bool) -> Result<(), ResourceContainerError> {
         let file = File::open(package_path)?;
         let mmap = unsafe { Mmap::map(&file)? };
 
