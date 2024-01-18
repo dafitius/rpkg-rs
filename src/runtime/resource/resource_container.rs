@@ -1,15 +1,12 @@
-use binrw::BinReaderExt;
-use memmap2::Mmap;
 use regex::Regex;
 use std::fmt;
-use std::fs::File;
-use std::io::Cursor;
 use std::iter::zip;
 use std::{collections::HashMap, fs, path::Path};
 use std::path::PathBuf;
+use itertools::Itertools;
 use thiserror::Error;
 
-use crate::runtime::resource::resource_package::ResourcePackage;
+use crate::runtime::resource::resource_package::{ResourcePackage, ResourcePackageError};
 
 use super::package_manager::PartitionInfo;
 use super::resource_info::ResourceInfo;
@@ -22,8 +19,8 @@ pub enum ResourceContainerError {
     #[error("Failed to open file: {0}")]
     IoError(#[from] std::io::Error),
 
-    #[error("Error while reading ResourcePackage: {0}")]
-    ReadResourcePackageError(#[from] binrw::Error),
+    #[error("Error while reading ResourcePackage({1}): {0}")]
+    ReadResourcePackageError(ResourcePackageError, String),
 
     #[error("Failed to parse patch index as u16: {0}")]
     ParsePatchIndexError(#[from] std::num::ParseIntError),
@@ -99,13 +96,8 @@ impl ResourceContainer {
     }
 
     fn mount_package(&mut self, package_path: &Path, is_patch: bool) -> Result<(), ResourceContainerError> {
-        let file = File::open(package_path)?;
-        let mmap = unsafe { Mmap::map(&file)? };
 
-        std::println!("Start reading {:?}", package_path);
-
-        let mut reader = Cursor::new(&mmap[..]);
-        let rpkg: ResourcePackage = reader.read_ne_args((is_patch,)).unwrap();
+        let rpkg = ResourcePackage::from_file(package_path).map_err(|e| ResourceContainerError::ReadResourcePackageError(e, package_path.file_name().unwrap().to_str().unwrap().to_string()))?;
 
         //remove the deletions if there are any
         if let Some(deletions) = rpkg.unneeded_resources {
