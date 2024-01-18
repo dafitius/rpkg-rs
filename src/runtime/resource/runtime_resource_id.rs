@@ -1,4 +1,5 @@
 use std::fmt;
+use std::fmt::{Debug, Formatter};
 use binrw::BinRead;
 use std::hash::Hash;
 use thiserror::Error;
@@ -54,6 +55,12 @@ impl RuntimeResourceID {
             }
             Err(_) => Err(RuntimeResourceIDError::ParseError(str.to_string())),
         }
+    }
+}
+
+impl Debug for RuntimeResourceID{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.to_hex_string())
     }
 }
 
