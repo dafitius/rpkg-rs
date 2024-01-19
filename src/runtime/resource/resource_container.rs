@@ -3,7 +3,6 @@ use std::fmt;
 use std::iter::zip;
 use std::{collections::HashMap, fs, path::Path};
 use std::path::PathBuf;
-use itertools::Itertools;
 use thiserror::Error;
 
 use crate::runtime::resource::resource_package::{ResourcePackage, ResourcePackageError};
@@ -30,8 +29,6 @@ pub enum ResourceContainerError {
 
     #[error("Failed to read package: {0}")]
     ReadPackageError(String),
-
-    // Add more error variants as needed
 }
 
 #[derive(Default)]

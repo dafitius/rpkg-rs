@@ -67,7 +67,8 @@ impl PackageManager {
     }
 
     pub fn initialize(&mut self, resource_container: &mut ResourceContainer) -> Result<(), PackageManagerError> {
-        for partition in self.partition_infos.iter_mut() {
+
+        for partition in self.partition_infos.iter() {
             if partition.state.available {
                 Self::mount_resource_packages_in_partition(resource_container, partition, &self.runtime_dir)?;
             }
