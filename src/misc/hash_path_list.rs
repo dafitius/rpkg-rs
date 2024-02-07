@@ -73,11 +73,13 @@ impl PathList {
     }
 
     pub fn get_files(&self, query: &str) -> HashSet<String> {
+        let mut query_filtered = query.to_ascii_lowercase();
+        query_filtered.retain(|c| c as u8 > 0x1F);
         let mut result = HashSet::default();
         for path in self.entries.values().flatten() {
             if let Some(path) = path.get_inner_most_resource_path() {
-                if path.starts_with(query) {
-                    let p: String = path.chars().skip(query.len() + 1).collect();
+                if path.starts_with(&query_filtered) {
+                    let p: String = path.chars().skip(query_filtered.len() + 1).collect();
                     if !p.contains('/') {
                         result.insert(p);
                     }
@@ -88,11 +90,13 @@ impl PathList {
     }
 
     pub fn get_folders(&self, query: &str) -> HashSet<String> {
+        let mut query_filtered = query.to_ascii_lowercase();
+        query_filtered.retain(|c| c as u8 > 0x1F);
         let mut result = HashSet::default();
         for path in self.entries.values().flatten() {
             if let Some(path) = path.get_inner_most_resource_path() {
-                if path.starts_with(query) {
-                    let path: String = path.chars().skip(query.len() + 1).collect();
+                if path.starts_with(&query_filtered) {
+                    let path: String = path.chars().skip(query_filtered.len() + 1).collect();
                     if let Some(n) = path.find('/') {
                         let p: String = path.chars().take(n).collect();
                         if !p.contains('.') {

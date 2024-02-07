@@ -1,15 +1,22 @@
 use std::fmt;
 
-use super::{resource_package::*, resource_index::ResourceIndex};
+use super::{resource_package::*};
 
 pub struct ResourceInfo
 {
-    pub entry : PackageOffsetInfo,
+    pub(crate) entry : PackageOffsetInfo,
     pub header : ResourceHeader,
-    pub size : u32,
-    pub is_lz4ed : bool,
-    pub is_scrambled: bool,
-    pub next_newest_index: Option<ResourceIndex>,
+}
+
+impl ResourceInfo{
+    pub fn get_is_compressed(&self) -> bool
+    { self.entry.get_compressed_size() != self.header.data_size.try_into().unwrap() }
+
+    pub fn get_is_scrambled(&self) -> bool
+    { self.entry.get_is_scrambled() }
+
+    pub fn get_compressed_size(&self) -> usize
+    { self.entry.get_compressed_size() }
 }
 
 impl fmt::Display for ResourceInfo {

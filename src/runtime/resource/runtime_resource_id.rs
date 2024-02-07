@@ -2,8 +2,8 @@ use std::fmt;
 use std::fmt::{Debug, Formatter};
 use binrw::BinRead;
 use std::hash::Hash;
+use md5::{Digest, Md5};
 use thiserror::Error;
-use crate::encryption::md5_engine::Md5Engine;
 use crate::misc::resource_id::ResourceID;
 
 #[derive(Error, Debug)]
@@ -38,8 +38,15 @@ impl RuntimeResourceID {
         Self{id: 0x00FFFFFFFFFFFFFF}
     }
     pub fn from_resource_id(rid: &ResourceID) -> Self {
+
+        let digest = Md5::digest(&rid.uri);
+        let mut hash = 0u64;
+        for i in 1..8 {
+            hash |= u64::from(digest[i]) << (8 * (7 - i));
+        }
+
         Self {
-            id: Md5Engine::compute(rid.uri.as_str()),
+            id: hash,
         }
     }
 

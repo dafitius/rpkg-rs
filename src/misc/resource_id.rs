@@ -9,9 +9,9 @@ pub struct ResourceID
 
 impl ResourceID{
     pub fn from_string(source: &str) -> Self {
-        Self{
-            uri: source.to_string()
-        }
+        let mut uri = source.to_ascii_lowercase();
+        uri.retain(|c| c as u8 > 0x1F);
+        Self{ uri }
     }
 
     pub fn create_derived(&self, extension: &str, parameters: &str, platform: &str) -> ResourceID {

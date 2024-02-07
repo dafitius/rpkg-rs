@@ -1,12 +1,15 @@
 use std::{fmt, io};
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{Cursor, Read, Seek};
+use std::iter::zip;
 use std::path::{Path};
-use binrw::{BinRead, BinReaderExt};
+use binrw::{BinRead, BinReaderExt, BinResult, parser};
 use lz4::block::decompress_to_buffer;
 use memmap2::Mmap;
 use modular_bitfield::prelude::*;
 use thiserror::Error;
+use crate::runtime::resource::resource_info::ResourceInfo;
 
 use crate::runtime::resource::runtime_resource_id::RuntimeResourceID;
 
@@ -26,25 +29,47 @@ pub enum ResourcePackageError {
 #[derive(BinRead)]
 #[br(import(is_patch: bool))]
 pub struct ResourcePackage {
-    pub(crate) magic: [u8; 4],
+    magic: [u8; 4],
 
     #[br(if (magic == * b"2KPR"))]
-    pub(crate) metadata: Option<PackageMetadata>,
+    metadata: Option<PackageMetadata>,
 
-    pub(crate) header: PackageHeader,
+    header: PackageHeader,
 
     #[br(if (is_patch && metadata.as_ref().map_or(true, | m | m.patch_id > 0)))]
-    pub(crate) unneeded_resource_count: u32,
+    unneeded_resource_count: u32,
 
     #[br(if (is_patch))]
     #[br(little, count = unneeded_resource_count)]
-    pub(crate) unneeded_resources: Option<Vec<RuntimeResourceID>>,
+    unneeded_resources: Option<Vec<RuntimeResourceID>>,
 
-    #[br(little, count = header.file_count)]
-    pub(crate) resource_entries: Vec<PackageOffsetInfo>,
+    #[br(parse_with = resource_parser, args(header.file_count))]
+    resources: HashMap<RuntimeResourceID, ResourceInfo>,
 
-    #[br(little, count = header.file_count)]
-    pub(crate) resource_metadata: Vec<ResourceHeader>,
+}
+
+#[parser(reader: reader, endian)]
+fn resource_parser(file_count: u32) -> BinResult<HashMap<RuntimeResourceID, ResourceInfo>> {
+    let mut map = HashMap::new();
+    let mut resource_entries = vec![];
+    for _ in 0..file_count {
+        resource_entries.push(PackageOffsetInfo::read_options(reader, endian, ())?);
+    }
+
+    let mut resource_metadata = vec![];
+    for _ in 0..file_count {
+        resource_metadata.push(ResourceHeader::read_options(reader, endian, ())?);
+    }
+
+    let resources =
+        zip(resource_entries, resource_metadata)
+            .map(|(entry, header)| ResourceInfo{ entry, header }).collect::<Vec<ResourceInfo>>();
+
+    for resource in resources {
+        map.insert(resource.entry.runtime_resource_id, resource);
+    }
+
+    Ok(map)
 }
 
 impl ResourcePackage {
@@ -75,33 +100,24 @@ impl ResourcePackage {
         }
     }
 
-    pub fn get_resource_header(&self, rrid: &RuntimeResourceID) -> Option<&ResourceHeader> {
-        match &self.resource_entries.iter().position(|m| m.runtime_resource_id == *rrid) {
-            Some(index) => {
-                self.resource_metadata.get(*index)
-            }
-            None => { None }
-        }
+    pub fn get_resource_info(&self, rrid: &RuntimeResourceID) -> Option<&ResourceInfo> {
+        self.resources.get(rrid)
     }
 
     pub fn get_resource(&self, package_path: &Path, rrid: &RuntimeResourceID) -> Result<Vec<u8>, ResourcePackageError> {
-        let (resource_header, resource_offset_info) = self
-            .resource_entries
-            .iter()
-            .enumerate()
-            .find(|(_, entry)| entry.runtime_resource_id == *rrid)
-            .map(|(index, entry)| (self.resource_metadata.get(index).unwrap(), entry)).ok_or_else(|| ResourcePackageError::ResourceNotFound)?;
-
-        let final_size = resource_offset_info.get_compressed_size();
-        let is_lz4ed = final_size != resource_header.data_size;
-        let is_scrambled = resource_offset_info.get_is_scrambled();
+        let resource = self
+            .resources
+            .get(rrid).ok_or(ResourcePackageError::ResourceNotFound)?;
+        let final_size = resource.get_compressed_size();
+        let is_lz4ed = final_size != resource.header.data_size.try_into().unwrap();
+        let is_scrambled = resource.get_is_scrambled();
 
         // Extract the resource bytes from the resourcePackage
         let mut file = File::open(package_path).map_err(ResourcePackageError::IoError)?;
 
-        file.seek(io::SeekFrom::Start(resource_offset_info.data_offset)).unwrap();
+        file.seek(io::SeekFrom::Start(resource.entry.data_offset)).unwrap();
 
-        let mut buffer = vec![0; final_size as usize];
+        let mut buffer = vec![0; final_size];
         file.read_exact(&mut buffer).unwrap();
 
         if is_scrambled {
@@ -112,16 +128,27 @@ impl ResourcePackage {
         }
 
         if is_lz4ed {
-            let mut file = vec![0; resource_header.data_size as usize];
-            let size = decompress_to_buffer(&buffer, Some(resource_header.data_size as i32), &mut file)
+            let mut file = vec![0; resource.header.data_size as usize];
+            let size = decompress_to_buffer(&buffer, Some(resource.header.data_size as i32), &mut file)
                 .map_err(ResourcePackageError::IoError)?;
 
-            if size == resource_header.data_size as usize {
+            if size == resource.header.data_size as usize {
                 return Ok(file);
             }
         }
 
         Ok(buffer)
+    }
+
+    pub fn get_resource_ids(&self) -> &HashMap<RuntimeResourceID, ResourceInfo>{
+        &self.resources
+    }
+
+    pub fn get_unneeded_resource_ids(&self) -> Vec<&RuntimeResourceID>{
+        match &self.unneeded_resources{
+            None => {vec![]}
+            Some(val) => {val.iter().collect()}
+        }
     }
 }
 
@@ -149,7 +176,7 @@ pub struct PackageHeader {
 #[derive(BinRead)]
 pub struct PackageOffsetInfo {
     pub(crate) runtime_resource_id: RuntimeResourceID,
-    data_offset: u64,
+    pub(crate) data_offset: u64,
     pub(crate) compressed_size_and_is_scrambled_flag: u32,
 }
 
@@ -157,8 +184,8 @@ impl PackageOffsetInfo {
     pub fn get_is_scrambled(&self) -> bool
     { self.compressed_size_and_is_scrambled_flag & 0x80000000 == 0x80000000 }
 
-    pub fn get_compressed_size(&self) -> u32
-    { self.compressed_size_and_is_scrambled_flag & 0x7FFFFFFF }
+    pub fn get_compressed_size(&self) -> usize
+    { (self.compressed_size_and_is_scrambled_flag & 0x7FFFFFFF) as usize }
 }
 
 #[allow(dead_code)]

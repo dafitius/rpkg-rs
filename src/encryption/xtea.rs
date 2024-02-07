@@ -25,7 +25,7 @@ impl Xtea {
     ];
     const DELTA: u32 = 0x61C88647;
 
-    pub fn is_encrypted_text_file(input_buffer: &Vec<u8>) -> bool {
+    pub fn is_encrypted_text_file(input_buffer: &[u8]) -> bool {
         if input_buffer.len() > 0x13 {
             input_buffer[..0x10] == Self::DEFAULT_ENCRYPTED_HEADER
         } else {
@@ -43,10 +43,10 @@ impl Xtea {
         hitman_xtea::decipher(data, Self::DELTA, Self::DEFAULT_NUMBER_OF_ROUNDS, key)
     }
 
-    pub fn decrypt_text_file(input_buffer: &Vec<u8>, key: &[u32; 4]) -> Result<String, XteaError>{
+    pub fn decrypt_text_file(input_buffer: &[u8], key: &[u32; 4]) -> Result<String, XteaError>{
 
         let bytes = hitman_xtea::decipher_file(
-            input_buffer.as_slice(),
+            input_buffer,
             Self::DELTA,
             Self::DEFAULT_ENCRYPTED_HEADER.as_slice(),
             Self::DEFAULT_NUMBER_OF_ROUNDS,
