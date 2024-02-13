@@ -15,6 +15,7 @@ pub enum RuntimeResourceIDError {
     ParseError(String),
 }
 
+/// Represents a runtime resource identifier.
 #[derive(BinRead, Default, PartialEq, Eq, Hash, Clone, Copy)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct RuntimeResourceID

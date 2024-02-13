@@ -57,7 +57,7 @@ impl ResourceID{
         }
     }
 
-    pub fn get_derived_end_index(&self) -> Option<usize>{
+    fn get_derived_end_index(&self) -> Option<usize>{
         if let Some(n) = Self::find_matching_parentheses(&self.uri, 0, '[', ']') {
             if self.uri.chars().nth(n + 1).unwrap_or(' ') == '(' {
                 if let Some(n2) = Self::find_matching_parentheses(&self.uri, n+1, '(', ')') {

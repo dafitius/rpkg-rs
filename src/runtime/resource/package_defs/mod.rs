@@ -23,6 +23,21 @@ pub enum PackageDefinitionError {
     DecryptionError(#[from] XteaError),
 }
 
+#[derive(Debug, Error)]
+pub enum PartitionIdError {
+    #[error("couldn't recognize the partition id: {0}")]
+    ParsingError(String),
+
+    #[error("couldn't compile regex: {0}")]
+    RegexError(#[from] regex::Error),
+}
+
+#[derive(Debug, Error)]
+pub enum PartitionInfoError {
+    #[error("couldn't init with partition id: {0}")]
+    IdError(#[from] PartitionIdError),
+}
+
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub enum PartitionType {
@@ -41,14 +56,17 @@ pub struct PartitionId {
 }
 
 impl FromStr for PartitionId{
-    type Err = ();
+    type Err = PartitionIdError;
 
     fn from_str(id: &str) -> Result<Self, Self::Err> {
-        let regex = Regex::new("^(chunk|dlc)(\\d+)(\\p{L}*)(?:patch\\d+)?$").unwrap();
+        let regex = Regex::new("^(chunk|dlc)(\\d+)(\\p{L}*)(?:patch\\d+)?$").map_err(PartitionIdError::RegexError)?;
         if regex.is_match(id){
-            let matches = regex.captures(id).unwrap();
-            let s : String = matches[1].parse().unwrap();
-            let lang : Option<String> = match matches[3].parse::<String>().unwrap(){
+            let matches = regex.captures(id).ok_or(PartitionIdError::ParsingError(id.to_string()))?;
+            let s : String = matches[1].parse()
+                .map_err(|e| PartitionIdError::ParsingError(format!("Unable to parse {:?} to a string: {}", &matches[1], e)) )?;
+            let lang : Option<String> = match matches[3].parse::<String>()
+                .map_err(|e| PartitionIdError::ParsingError(format!("Unable to parse {:?} to a string {}", &matches[3], e)) )?
+            {
                 s if s.is_empty()  => {None}
                 s => {Some(s)}
             };
@@ -73,10 +91,11 @@ impl FromStr for PartitionId{
 
             return Ok(Self{
                 part_type,
-                index: matches[2].parse().unwrap(),
+                index: matches[2].parse()
+                    .map_err(|e| PartitionIdError::ParsingError(format!("Unable to parse {:?} to a string: {}", &matches[2], e)))?,
             });
         }
-        Err(())
+        Err(PartitionIdError::ParsingError(format!("Unable to parse {} to a partitionId", id)))
     }
 }
 
@@ -93,26 +112,36 @@ impl Display for PartitionId{
     }
 }
 
+
+/// Represents information about a resource partition.
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct PartitionInfo {
+    /// The name of the partition, if available.
     pub name: Option<String>,
+    /// The parent partition's identifier, if any.
     pub parent: Option<PartitionId>,
+    /// The identifier of the partition.
+    /// Example: "chunk9", "dlc12" or "dlc5langjp"
     pub id: PartitionId,
-    patchlevel: usize, //We can't use this because of the custom patch levels set by most tools.
+    /// The patch level of the partition. Note: Custom patch levels set by most tools make this field unreliable for general use.
+    patchlevel: usize,
+    /// The list of resource IDs associated with this partition.
     pub roots: RefCell<Vec<ResourceID>>,
 }
 
+
+
 impl PartitionInfo{
 
-    pub fn from_id(id: &str) -> Self{
-        Self{
+    pub fn from_id(id: &str) -> Result<Self, PartitionInfoError>{
+        Ok(Self{
             name: None,
             parent: None,
-            id: id.parse().unwrap(),
+            id: id.parse().map_err(PartitionInfoError::IdError)?,
             patchlevel: 0,
             roots: RefCell::new(vec![]),
-        }
+        })
     }
 
     pub fn get_filename(&self, patch_index: Option<usize>) -> String{

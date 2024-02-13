@@ -21,7 +21,10 @@ fn main() {
     let rid = ResourceID::from_string(&args[3]);
     let rrid: RuntimeResourceID = RuntimeResourceID::from_resource_id(&rid);
 
-    let partition_info = PartitionInfo::from_id(&args[2]);
+    let partition_info = PartitionInfo::from_id(&args[2]).unwrap_or_else(|e| {
+        println!("Failed parse partition id: {:?}", e);
+        std::process::exit(0)
+    });
     
     let mut partition = ResourcePartition::new(partition_info);
     print!("Mounting partition {} ", &partition.get_partition_info().id);

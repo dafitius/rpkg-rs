@@ -55,6 +55,8 @@ impl ResourcePartition {
         }
     }
 
+    /// search through the package_dir to figure out which patch indices are there.
+    /// We have to use this inside of using the patchlevel inside the PartitionInfo.
     fn get_patch_indices(&self, package_dir: &PathBuf) -> Result<Vec<usize>, ResourcePartitionError> {
         let mut patch_indices = vec![];
 
@@ -65,7 +67,7 @@ impl ResourcePartition {
 
         let regex_str = package_dir.join(format!("{}patch([0-9]+).rpkg", self.info.id))
             .as_os_str().to_str().unwrap_or("")
-            .replace('\\', "\\\\");
+            .replace('\\', "/");
         let patch_package_re = Regex::new(regex_str.as_str()).unwrap();
         for path_buf in fs::read_dir(package_dir)?
             .filter(|r| r.is_ok())
