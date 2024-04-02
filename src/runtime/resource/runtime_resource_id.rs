@@ -51,8 +51,15 @@ impl RuntimeResourceID {
         }
     }
 
-    pub fn from_hex_string(str: &str) -> Result<Self, RuntimeResourceIDError> {
-        match str.parse::<u64>() {
+    pub fn from_hex_string(hex_string: &str) -> Result<Self, RuntimeResourceIDError> {
+
+        let hex_string = if hex_string.starts_with("0x") {
+            &hex_string[2..]
+        } else {
+            hex_string
+        };
+
+        match u64::from_str_radix(hex_string, 16) {
             Ok(num) => {
                 let rrid = RuntimeResourceID{id:num};
                 if !rrid.is_valid() {
@@ -61,7 +68,7 @@ impl RuntimeResourceID {
                     Ok(rrid)
                 }
             }
-            Err(_) => Err(RuntimeResourceIDError::ParseError(str.to_string())),
+            Err(_) => Err(RuntimeResourceIDError::ParseError(hex_string.to_string())),
         }
     }
 }

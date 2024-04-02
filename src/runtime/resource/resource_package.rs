@@ -16,7 +16,7 @@ use crate::runtime::resource::runtime_resource_id::RuntimeResourceID;
 #[derive(Debug, Error)]
 pub enum ResourcePackageError {
     #[error("Error opening the file: {0}")]
-    IoError(#[from] std::io::Error),
+    IoError(#[from] io::Error),
 
     #[error("Couldn't find the requested resource inside of the given resource package")]
     ResourceNotFound,
@@ -109,7 +109,7 @@ impl ResourcePackage {
             .resources
             .get(rrid).ok_or(ResourcePackageError::ResourceNotFound)?;
         let final_size = resource.get_compressed_size();
-        let is_lz4ed = final_size != resource.header.data_size.try_into().unwrap();
+        let is_lz4ed = final_size != 0;
         let is_scrambled = resource.get_is_scrambled();
 
         // Extract the resource bytes from the resourcePackage
@@ -117,7 +117,7 @@ impl ResourcePackage {
 
         file.seek(io::SeekFrom::Start(resource.entry.data_offset)).unwrap();
 
-        let mut buffer = vec![0; final_size];
+        let mut buffer = vec![0; if is_lz4ed {final_size} else {resource.header.data_size as usize}];
         file.read_exact(&mut buffer).unwrap();
 
         if is_scrambled {
