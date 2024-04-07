@@ -1,5 +1,7 @@
 use crate::runtime::resource::runtime_resource_id::RuntimeResourceID;
 
+static CONSOLE_TAG: &str = "pc";
+
 #[derive(Clone, Debug)]
 #[cfg_attr(feature="serde", derive(serde::Serialize))]
 pub struct ResourceID
@@ -19,7 +21,7 @@ impl ResourceID{
         if !platform.is_empty() {
             derived += format!("({})", platform).as_str();
         }
-        derived += ".pc_";
+        derived += format!(".{}_", CONSOLE_TAG).as_str();
         if !parameters.is_empty() {
             derived += parameters;
         }
@@ -34,6 +36,7 @@ impl ResourceID{
         self.uri.find(']').map(|n| self.uri.chars().skip(open_count).take(n-1).collect())
     }
 
+    #[allow(unused)]
     fn find_matching_parentheses(str: &str, start_index: usize, open: char, close: char) -> Option<usize> {
         let mut open_count = str.chars().skip(start_index).filter(|c| *c == open).count();
         for (i, c) in str.chars().skip(start_index).enumerate() {
@@ -57,6 +60,7 @@ impl ResourceID{
         }
     }
 
+    #[allow(unused)]
     fn get_derived_end_index(&self) -> Option<usize>{
         if let Some(n) = Self::find_matching_parentheses(&self.uri, 0, '[', ']') {
             if self.uri.chars().nth(n + 1).unwrap_or(' ') == '(' {
@@ -91,7 +95,7 @@ impl ResourceID{
             !self.uri.contains("unknown") &&
                 !self.uri.contains('*') &&
                 self.uri.starts_with('[') &&
-                self.uri.contains("].pc_")
+                self.uri.contains(format!("].{}_", CONSOLE_TAG).as_str())
         }
     }
 

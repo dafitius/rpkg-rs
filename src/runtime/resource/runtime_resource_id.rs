@@ -20,7 +20,7 @@ pub enum RuntimeResourceIDError {
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct RuntimeResourceID
 {
-    pub id: u64,
+    id: u64,
 }
 
 impl PartialEq<u64> for RuntimeResourceID {
@@ -29,12 +29,21 @@ impl PartialEq<u64> for RuntimeResourceID {
     }
 }
 
+impl From<u64> for RuntimeResourceID {
+    fn from(value: u64) -> Self {
+        let mut rrid = RuntimeResourceID{id:value};
+        if !rrid.is_valid() {
+            rrid = RuntimeResourceID::invalid();
+        }
+        rrid
+    }
+}
+
 impl RuntimeResourceID {
     pub fn to_hex_string(&self) -> String {
         format!("{:016X}", self.id)
     }
     pub fn is_valid(&self) -> bool { self.id < 0x00FFFFFFFFFFFFFF }
-
     pub fn invalid() -> Self {
         Self{id: 0x00FFFFFFFFFFFFFF}
     }
@@ -53,8 +62,8 @@ impl RuntimeResourceID {
 
     pub fn from_hex_string(hex_string: &str) -> Result<Self, RuntimeResourceIDError> {
 
-        let hex_string = if hex_string.starts_with("0x") {
-            &hex_string[2..]
+        let hex_string = if let Some(hex_string) = hex_string.strip_prefix("0x") {
+            hex_string
         } else {
             hex_string
         };

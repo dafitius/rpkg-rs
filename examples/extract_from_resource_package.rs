@@ -16,6 +16,7 @@ fn main() {
     //set the args
     let package_path = PathBuf::from(&args[1]);
     let rid = ResourceID::from_string(&args[2]);
+
     let rrid: RuntimeResourceID = RuntimeResourceID::from_resource_id(&rid);
 
     println!("Parsing the resource package at {}", package_path.display());

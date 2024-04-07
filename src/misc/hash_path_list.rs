@@ -49,13 +49,13 @@ impl PathList {
                     let rid = ResourceID { uri: (path).to_string() };
                     if !check_md5 {
                         if rid.is_valid() {
-                            return Some((RuntimeResourceID { id }, Some(rid)));
+                            return Some((RuntimeResourceID::from(id), Some(rid)));
                         }
-                    } else if id == RuntimeResourceID::from_resource_id(&rid).id {
-                        return Some((RuntimeResourceID { id }, Some(rid)));
+                    } else if RuntimeResourceID::from_resource_id(&rid) == id {
+                        return Some((RuntimeResourceID::from(id), Some(rid)));
                     }
                 }
-                Some((RuntimeResourceID { id }, None))
+                Some((RuntimeResourceID::from(id), None))
             } else { None }
         }).collect::<Vec<_>>().into_iter().collect();
 

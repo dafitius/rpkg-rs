@@ -1,10 +1,11 @@
 use std::path::{PathBuf};
+use itertools::Itertools;
 use thiserror::Error;
 
 use crate::runtime::resource::package_defs::{PackageDefinitionError, PackageDefinitionSource, PartitionInfo};
 use crate::runtime::resource::resource_info::ResourceInfo;
 use crate::runtime::resource::runtime_resource_id::{RuntimeResourceID};
-use super::resource_partition::{ResourcePartition, ResourcePartitionError};
+use super::resource_partition::{PatchId, ResourcePartition, ResourcePartitionError};
 
 #[derive(Debug, Error)]
 pub enum PackageManagerError {
@@ -57,7 +58,7 @@ impl PartitionManager {
             F: FnMut(&PartitionState),
     {
         let mut partition = ResourcePartition::new(partition_info);
-        let mut state_result : PartitionState = PartitionState{
+        let mut state_result: PartitionState = PartitionState {
             installing: false,
             mounted: false,
             install_progress: 0.0,
@@ -68,7 +69,7 @@ impl PartitionManager {
             state_result = *state;
         };
 
-        partition.mount_resource_packages_in_partition(&self.runtime_directory, callback)?;
+        partition.mount_resource_packages_in_partition_with_hook(&self.runtime_directory, callback)?;
 
         if state_result.mounted {
             self.partitions.push(partition);
@@ -77,39 +78,73 @@ impl PartitionManager {
         Ok(())
     }
 
-    pub fn get_resource_from(&self, partition_index: usize, rrid: RuntimeResourceID) -> Result<Vec<u8>, PackageManagerError>{
-        let partition = self.partitions.iter().find(|partition| partition.info.id.index == partition_index);
-        if let Some(partition) = partition{
-           match partition.get_resource(&rrid){
-               Ok(data) => { Ok(data)}
-               Err(e) => {Err(PackageManagerError::PartitionError(e))}
-           }
-        }else{
+    pub fn get_resource_from(&self, partition_index: usize, rrid: RuntimeResourceID) -> Result<Vec<u8>, PackageManagerError> {
+        let partition = self.partitions.iter().find(|partition| partition.get_partition_info().id.index == partition_index);
+        if let Some(partition) = partition {
+            match partition.get_resource(&rrid) {
+                Ok(data) => { Ok(data) }
+                Err(e) => { Err(PackageManagerError::PartitionError(e)) }
+            }
+        } else {
             Err(PackageManagerError::PartitionNotFound(partition_index.to_string()))
         }
     }
 
-    pub fn get_resource_info_from(&self, partition_index: usize, rrid: RuntimeResourceID) -> Result<&ResourceInfo, PackageManagerError>{
-        let partition = self.partitions.iter().find(|partition| partition.info.id.index == partition_index);
-        if let Some(partition) = partition{
-            match partition.get_resource_info(&rrid){
-                Ok(info) => { Ok(info)}
-                Err(e) => {Err(PackageManagerError::PartitionError(e))}
+    pub fn get_partition(&self, partition_index: usize) -> Result<&ResourcePartition, PackageManagerError> {
+        let partition = self.partitions.iter().find(|partition| partition.get_partition_info().id.index == partition_index).ok_or(PackageManagerError::PartitionNotFound(partition_index.to_string()))?;
+        Ok(partition)
+    }
+
+    pub fn get_resource_info_from(&self, partition_index: usize, rrid: RuntimeResourceID) -> Result<&ResourceInfo, PackageManagerError> {
+        let partition = self.partitions.iter().find(|partition| partition.get_partition_info().id.index == partition_index);
+        if let Some(partition) = partition {
+            match partition.get_resource_info(&rrid) {
+                Ok(info) => { Ok(info) }
+                Err(e) => { Err(PackageManagerError::PartitionError(e)) }
             }
-        }else{
+        } else {
             Err(PackageManagerError::PartitionNotFound(partition_index.to_string()))
         }
     }
 
-    pub fn print_resource_changelog(&self, partition_index: usize, rrid: RuntimeResourceID) -> Result<Vec<u8>, PackageManagerError>{
-        let partition = self.partitions.iter().find(|partition| partition.info.id.index == partition_index);
-        if let Some(partition) = partition{
-            match partition.get_resource(&rrid){
-                Ok(data) => { Ok(data)}
-                Err(e) => {Err(PackageManagerError::PartitionError(e))}
+    pub fn print_resource_changelog(&self, rrid: &RuntimeResourceID) {
+        println!("Resource: {rrid}");
+
+        for partition in self.partitions.iter() {
+            let mut last_occurence: Option<&ResourceInfo> = None;
+
+            let get_size = |info: &ResourceInfo| {
+                match info.get_is_compressed() {
+                    true => { info.get_compressed_size() }
+                    false => { info.header.data_size as usize }
+                }
+            };
+
+            let changes = partition.get_resource_patch_indices(rrid);
+            let deletions = partition.get_resource_removal_indices(rrid);
+            let occurrences = changes.clone().into_iter().chain(deletions.clone().into_iter()).collect::<Vec<&PatchId>>();
+            for occurence in occurrences.iter().sorted() {
+
+                println!("{}: {}", match occurence {
+                    PatchId::Base => { "Base" }
+                    PatchId::Patch(_) => { "Patch" }
+                }, partition.get_partition_info().get_filename(occurence));
+
+                if deletions.contains(occurence) {
+                    println!("\t- Removal: resource deleted");
+                    last_occurence = None;
+                }
+                if changes.contains(occurence) {
+                    if let Ok(info) = partition.get_resource_info_from(rrid, occurence) {
+                        if let Some(last_info) = last_occurence {
+                            println!("\t- Modification: Size changed from {} to {}", get_size(last_info), get_size(info));
+                        } else {
+                            println!("\t- Addition: New occurrence, Size {} bytes", get_size(info))
+                        }
+                        last_occurence = Some(info);
+                    }
+                }
             }
-        }else{
-            Err(PackageManagerError::PartitionNotFound(partition_index.to_string()))
         }
     }
 }

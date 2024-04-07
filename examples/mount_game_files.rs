@@ -63,7 +63,7 @@ fn main() {
         let package_defs_bytes = utils::get_file_as_byte_vec(runtime_path.join("packagedefinition.txt").as_path()).unwrap();
 
         let package_defs = match args[2].as_str(){
-            "H2016" => {PackageDefinitionSource::H2016(package_defs_bytes).read()},
+            "HM2016" => {PackageDefinitionSource::HM2016(package_defs_bytes).read()},
             "HM2" => {PackageDefinitionSource::HM2(package_defs_bytes).read()},
             "HM3" => {PackageDefinitionSource::HM3(package_defs_bytes).read()},
             e => {

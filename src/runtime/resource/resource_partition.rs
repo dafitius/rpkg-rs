@@ -1,9 +1,11 @@
 use regex::Regex;
 use std::{fmt, io};
 use std::{collections::HashMap, fs, path::Path};
+use std::cmp::Ordering;
 use std::fmt::Debug;
 use std::path::PathBuf;
 use thiserror::Error;
+use crate::{GlacierResource, GlacierResourceError, WoaVersion};
 use crate::runtime::resource::package_defs::PartitionInfo;
 use crate::runtime::resource::partition_manager::PartitionState;
 use crate::runtime::resource::resource_info::ResourceInfo;
@@ -35,14 +37,41 @@ pub enum ResourcePartitionError {
 
     #[error("Resource not available")]
     ResourceNotAvailable,
+
+    #[error("Interal resource error: {0}")]
+    ResourceError(#[from] GlacierResourceError)
+}
+
+#[derive(Clone, Copy, Debug)]
+#[derive(Eq, Hash, PartialEq)]
+pub enum PatchId{
+    Base,
+    Patch(usize)
+}
+
+impl Ord for PatchId {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match (self, other) {
+            (PatchId::Base, PatchId::Base) => Ordering::Equal,
+            (PatchId::Base, PatchId::Patch(_)) => Ordering::Less,
+            (PatchId::Patch(_), PatchId::Base) => Ordering::Greater,
+            (PatchId::Patch(a), PatchId::Patch(b)) => a.cmp(b),
+        }
+    }
+}
+
+impl PartialOrd for PatchId {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 pub struct ResourcePartition {
-    pub(crate) info: PartitionInfo,
+    info: PartitionInfo,
     mount_location: Option<PathBuf>,
 
-    packages: HashMap<Option<usize>, ResourcePackage>,
-    resources: HashMap<RuntimeResourceID, Option<usize>>,
+    packages: HashMap<PatchId, ResourcePackage>,
+    resources: HashMap<RuntimeResourceID, PatchId>,
 }
 
 impl ResourcePartition {
@@ -60,7 +89,7 @@ impl ResourcePartition {
     fn get_patch_indices(&self, package_dir: &PathBuf) -> Result<Vec<usize>, ResourcePartitionError> {
         let mut patch_indices = vec![];
 
-        let filename = self.info.get_filename(None);
+        let filename = self.info.get_filename(&PatchId::Base);
         if !package_dir.join(&filename).exists() {
             return Err(ResourcePartitionError::BasePackageNotFound(filename));
         }
@@ -74,9 +103,9 @@ impl ResourcePartition {
             .map(|r| r.unwrap().path())
             .filter(|r| r.is_file())
         {
-            let path = path_buf.as_path().to_str().unwrap();
-            if patch_package_re.is_match(path) {
-                let cap = patch_package_re.captures(path).unwrap();
+            let path = path_buf.as_path().to_str().unwrap_or("").replace('\\', "/");
+            if patch_package_re.is_match(path.as_str()) {
+                let cap = patch_package_re.captures(path.as_str()).unwrap();
                 patch_indices.push(cap[1].parse::<usize>()?);
             }
         }
@@ -84,7 +113,12 @@ impl ResourcePartition {
         Ok(patch_indices)
     }
 
-    pub fn mount_resource_packages_in_partition<F>(&mut self, runtime_path: &PathBuf, mut progress_callback: F,
+    pub fn mount_resource_packages_in_partition(&mut self, runtime_path: &PathBuf,
+    ) -> Result<(), ResourcePartitionError>{
+        self.mount_resource_packages_in_partition_with_hook(runtime_path, |_|{})
+    }
+
+    pub fn mount_resource_packages_in_partition_with_hook<F>(&mut self, runtime_path: &PathBuf, mut progress_callback: F,
     ) -> Result<(), ResourcePartitionError>
         where
             F: FnMut(&PartitionState), {
@@ -105,14 +139,14 @@ impl ResourcePartition {
 
         let patch_indices = patch_idx_result.unwrap();
 
-        let base_package_path = runtime_path.join(self.info.get_filename(None));
-        self.mount_package(base_package_path.as_path(), None)?;
+        let base_package_path = runtime_path.join(self.info.get_filename(&PatchId::Base));
+        self.mount_package(base_package_path.as_path(), PatchId::Base)?;
 
         for (index, patch_index) in patch_indices.iter().enumerate() {
             let patch_package_path = runtime_path.join(
-                self.info.get_filename(Some(*patch_index))
+                self.info.get_filename(&PatchId::Patch(*patch_index))
             );
-            self.mount_package(patch_package_path.as_path(), Some(*patch_index))?;
+            self.mount_package(patch_package_path.as_path(), PatchId::Patch(*patch_index))?;
 
             state.install_progress = index as f32 / patch_indices.len() as f32;
             progress_callback(&state);
@@ -127,7 +161,7 @@ impl ResourcePartition {
         Ok(())
     }
 
-    fn mount_package(&mut self, package_path: &Path, patch_index: Option<usize>) -> Result<(), ResourcePartitionError> {
+    fn mount_package(&mut self, package_path: &Path, patch_index: PatchId) -> Result<(), ResourcePartitionError> {
         let rpkg = ResourcePackage::from_file(package_path).map_err(|e| ResourcePartitionError::ReadResourcePackageError(e, package_path.file_name().unwrap().to_str().unwrap().to_string()))?;
 
         //remove the deletions if there are any
@@ -150,16 +184,31 @@ impl ResourcePartition {
         self.resources.contains_key(rrid)
     }
 
+    #[allow(dead_code)]
+    pub(crate) fn get_num_patches(&self) -> usize{
+        self.packages.len().saturating_sub(1)
+    }
+
     pub fn get_resource(&self, rrid: &RuntimeResourceID) -> Result<Vec<u8>, ResourcePartitionError> {
         let package_index = self.resources.get(rrid).ok_or(ResourcePartitionError::ResourceNotAvailable)?;
         let rpkg = self.packages.get(package_index).ok_or(ResourcePartitionError::NotMounted)?;
         let mut package_path = self.mount_location.clone().ok_or(ResourcePartitionError::NotMounted)?;
-        package_path = package_path.join(self.info.get_filename(*package_index));
-        rpkg.get_resource(package_path.as_path(), rrid).map_err(|e| ResourcePartitionError::ReadResourcePackageError(e, self.info.get_filename(*package_index)))
+        package_path = package_path.join(self.info.get_filename(package_index));
+        rpkg.get_resource(package_path.as_path(), rrid).map_err(|e| ResourcePartitionError::ReadResourcePackageError(e, self.info.get_filename(package_index)))
     }
 
-    pub fn get_resource_from(&self, rrid: &RuntimeResourceID, patch_id: Option<usize>) -> Result<Vec<u8>, ResourcePartitionError> {
-        let rpkg = self.packages.get(&patch_id).ok_or(ResourcePartitionError::NotMounted)?;
+    pub fn get_glacier_resource<T>(&self, woa_version: WoaVersion, rrid: &RuntimeResourceID) -> Result<T::Output, ResourcePartitionError>
+        where T: GlacierResource {
+        let package_index = self.resources.get(rrid).ok_or(ResourcePartitionError::ResourceNotAvailable)?;
+        let rpkg = self.packages.get(package_index).ok_or(ResourcePartitionError::NotMounted)?;
+        let mut package_path = self.mount_location.clone().ok_or(ResourcePartitionError::NotMounted)?;
+        package_path = package_path.join(self.info.get_filename(package_index));
+        let bytes = rpkg.get_resource(package_path.as_path(), rrid).map_err(|e| ResourcePartitionError::ReadResourcePackageError(e, self.info.get_filename(package_index)))?;
+        T::process_data(woa_version, bytes).map_err(ResourcePartitionError::ResourceError)
+    }
+
+    pub fn get_resource_from(&self, rrid: &RuntimeResourceID, patch_id: &PatchId) -> Result<Vec<u8>, ResourcePartitionError> {
+        let rpkg = self.packages.get(patch_id).ok_or(ResourcePartitionError::NotMounted)?;
         let mut package_path = self.mount_location.clone().ok_or(ResourcePartitionError::NotMounted)?;
         package_path = package_path.join(self.info.get_filename(patch_id));
         rpkg.get_resource(package_path.as_path(), rrid).map_err(|e| ResourcePartitionError::ReadResourcePackageError(e, self.info.get_filename(patch_id)))
@@ -171,26 +220,28 @@ impl ResourcePartition {
         rpkg.get_resource_info(rrid).ok_or(ResourcePartitionError::ResourceNotAvailable)
     }
 
+    pub fn get_resource_info_from(&self, rrid: &RuntimeResourceID, patch_id: &PatchId) -> Result<&ResourceInfo, ResourcePartitionError> {
+        let rpkg = self.packages.get(patch_id).ok_or(ResourcePartitionError::NotMounted)?;
+        rpkg.get_resource_info(rrid).ok_or(ResourcePartitionError::ResourceNotAvailable)
+    }
+
     pub fn get_partition_info(&self) -> &PartitionInfo {
         &self.info
     }
 
-    pub fn print_resource_changelog(&self, rrid: &RuntimeResourceID) -> Result<Vec<u8>, ResourcePartitionError> {
-        let mut versions = vec![];
+    pub fn get_resource_patch_indices(&self, rrid: &RuntimeResourceID) -> Vec<&PatchId> {
+        self.packages.iter().filter(|(_, package)| package.has_resource(rrid)).map(|(id, _)| id).collect::<Vec<&PatchId>>()
+    }
 
-
-        if let Some(resource_info) = self.resources.get(rrid) {
-            versions.push(resource_info);
-        };
-
-        Err(ResourcePartitionError::ResourceNotAvailable)
+    pub fn get_resource_removal_indices(&self, rrid: &RuntimeResourceID) -> Vec<&PatchId> {
+        self.packages.iter().filter(|(_, package)| package.removes_resource(rrid)).map(|(id, _)| id).collect::<Vec<&PatchId>>()
     }
 }
 
 impl Debug for ResourcePartition {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let total = self.packages.values().map(|v| v.get_resource_ids().len()).sum::<usize>();
-        write!(f, "{{index: {}, name: {}, edge_resources: {}, total_resources: {} }}", self.info.get_filename(None), self.info.name.clone().unwrap_or(String::new()), self.resources.len(), total)?;
+        write!(f, "{{index: {}, name: {}, edge_resources: {}, total_resources: {} }}", self.info.get_filename(&PatchId::Base), self.info.name.clone().unwrap_or_default(), self.resources.len(), total)?;
 
         Ok(())
     }

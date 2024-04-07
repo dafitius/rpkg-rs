@@ -63,7 +63,7 @@ fn resource_parser(file_count: u32) -> BinResult<HashMap<RuntimeResourceID, Reso
 
     let resources =
         zip(resource_entries, resource_metadata)
-            .map(|(entry, header)| ResourceInfo{ entry, header }).collect::<Vec<ResourceInfo>>();
+            .map(|(entry, header)| ResourceInfo { entry, header }).collect::<Vec<ResourceInfo>>();
 
     for resource in resources {
         map.insert(resource.entry.runtime_resource_id, resource);
@@ -77,7 +77,7 @@ impl ResourcePackage {
         let file = File::open(package_path).map_err(ResourcePackageError::IoError)?;
         let mmap = unsafe { Mmap::map(&file).map_err(ResourcePackageError::IoError)? };
         let mut reader = Cursor::new(&mmap[..]);
-        let is_patch = package_path.clone().file_name().unwrap().to_str().unwrap().contains("patch");
+        let is_patch = package_path.file_name().unwrap().to_str().unwrap().contains("patch");
         reader.read_ne_args::<ResourcePackage>((is_patch, )).map_err(ResourcePackageError::ParsingError)
     }
 
@@ -104,12 +104,22 @@ impl ResourcePackage {
         self.resources.get(rrid)
     }
 
+    pub fn has_resource(&self, rrid: &RuntimeResourceID) -> bool {
+        self.resources.contains_key(rrid)
+    }
+
+    pub fn removes_resource(&self, rrid: &RuntimeResourceID) -> bool {
+        if let Some(unneeded_resources) = &self.unneeded_resources {
+            unneeded_resources.contains(rrid)
+        } else { false }
+    }
+
     pub fn get_resource(&self, package_path: &Path, rrid: &RuntimeResourceID) -> Result<Vec<u8>, ResourcePackageError> {
         let resource = self
             .resources
             .get(rrid).ok_or(ResourcePackageError::ResourceNotFound)?;
         let final_size = resource.get_compressed_size();
-        let is_lz4ed = final_size != 0;
+        let is_lz4ed = resource.get_is_compressed();
         let is_scrambled = resource.get_is_scrambled();
 
         // Extract the resource bytes from the resourcePackage
@@ -117,7 +127,7 @@ impl ResourcePackage {
 
         file.seek(io::SeekFrom::Start(resource.entry.data_offset)).unwrap();
 
-        let mut buffer = vec![0; if is_lz4ed {final_size} else {resource.header.data_size as usize}];
+        let mut buffer = vec![0; if is_lz4ed { final_size } else { resource.header.data_size as usize }];
         file.read_exact(&mut buffer).unwrap();
 
         if is_scrambled {
@@ -140,14 +150,14 @@ impl ResourcePackage {
         Ok(buffer)
     }
 
-    pub fn get_resource_ids(&self) -> &HashMap<RuntimeResourceID, ResourceInfo>{
+    pub fn get_resource_ids(&self) -> &HashMap<RuntimeResourceID, ResourceInfo> {
         &self.resources
     }
 
-    pub fn get_unneeded_resource_ids(&self) -> Vec<&RuntimeResourceID>{
-        match &self.unneeded_resources{
-            None => {vec![]}
-            Some(val) => {val.iter().collect()}
+    pub fn get_unneeded_resource_ids(&self) -> Vec<&RuntimeResourceID> {
+        match &self.unneeded_resources {
+            None => { vec![] }
+            Some(val) => { val.iter().collect() }
         }
     }
 }

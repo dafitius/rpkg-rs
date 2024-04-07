@@ -4,6 +4,7 @@ pub mod hm3_parser;
 pub mod hm2_parser;
 pub mod h2016_parser;
 
+use crate::runtime::resource::resource_partition::PatchId;
 use std::cell::RefCell;
 use std::fmt::Display;
 use std::str::FromStr;
@@ -12,7 +13,9 @@ use thiserror::Error;
 
 use crate::encryption::xtea::XteaError;
 use crate::misc::resource_id::ResourceID;
+use crate::runtime::resource::package_defs::PackageDefinitionSource::{HM2, HM2016, HM3};
 use crate::runtime::resource::package_defs::PartitionType::{LanguageDlc, LanguageStandard, Dlc, Standard};
+use crate::WoaVersion;
 
 #[derive(Debug, Error)]
 pub enum PackageDefinitionError {
@@ -21,6 +24,9 @@ pub enum PackageDefinitionError {
 
     #[error("Decryption error: {0}")]
     DecryptionError(#[from] XteaError),
+
+    #[error("Invalid packagedefintiion file: ({0})")]
+    UnexpectedFormat(String)
 }
 
 #[derive(Debug, Error)]
@@ -144,13 +150,13 @@ impl PartitionInfo{
         })
     }
 
-    pub fn get_filename(&self, patch_index: Option<usize>) -> String{
+    pub fn get_filename(&self, patch_index: &PatchId) -> String{
         match patch_index{
-            None => {
+            PatchId::Base => {
                 let base = self.id.to_string();
                 format!("{}.rpkg", base)
             }
-            Some(patch_idx) => {
+            PatchId::Patch(patch_idx) => {
                 let base = self.id.to_string();
                 format!("{}patch{}.rpkg", base, patch_idx)
             }
@@ -166,18 +172,26 @@ pub trait PackageDefinitionParser {
 pub enum PackageDefinitionSource {
     HM3(Vec<u8>),
     HM2(Vec<u8>),
-    H2016(Vec<u8>),
+    HM2016(Vec<u8>),
     Custom(Vec<PartitionInfo>)
 }
 
 impl PackageDefinitionSource {
-    // Function to construct Vec<Foo> based on the enum variant
+
+    pub fn from_version(woa_version: WoaVersion, data: Vec<u8>) -> Self{
+        match woa_version{
+            WoaVersion::HM2016 => {HM2016(data)}
+            WoaVersion::HM2 => {HM2(data)}
+            WoaVersion::HM3 => {HM3(data)}
+        }
+    }
+
     pub fn read(&self) -> Result<Vec<PartitionInfo>, PackageDefinitionError> {
         match self {
             PackageDefinitionSource::Custom(vec) => Ok(vec.clone()),
             PackageDefinitionSource::HM3(vec) => hm3_parser::HM3Parser::parse(vec),
             PackageDefinitionSource::HM2(vec) => hm2_parser::HM2Parser::parse(vec),
-            PackageDefinitionSource::H2016(vec) => h2016_parser::H2016Parser::parse(vec),
+            PackageDefinitionSource::HM2016(vec) => h2016_parser::H2016Parser::parse(vec),
         }
     }
 }

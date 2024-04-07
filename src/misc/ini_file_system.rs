@@ -116,7 +116,7 @@ impl IndexMut<&str> for IniFileSection {
     fn index_mut(&mut self, option_name: &str) -> &mut str {
         self.options
             .entry(option_name.to_string())
-            .or_insert(String::new())
+            .or_default()
     }
 }
 
@@ -289,6 +289,7 @@ impl IniFileSystem {
             let mut writer = fs::OpenOptions::new()
                 .write(true)
                 .create(true)
+                .truncate(true)
                 .open(&file_path)?;
             let mut contents = String::new();
             ini_file.write_ini_file(&mut contents);

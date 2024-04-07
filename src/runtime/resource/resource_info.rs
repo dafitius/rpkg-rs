@@ -10,7 +10,7 @@ pub struct ResourceInfo
 
 impl ResourceInfo{
     pub fn get_is_compressed(&self) -> bool
-    { self.entry.get_compressed_size() != self.header.data_size.try_into().unwrap() }
+    { self.entry.get_compressed_size() != 0 }
 
     pub fn get_is_scrambled(&self) -> bool
     { self.entry.get_is_scrambled() }

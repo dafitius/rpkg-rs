@@ -13,7 +13,59 @@
 //!
 //! rpkg-rs aims to streamline the process of working with Hitman game resources, offering a robust set of features to read ResourcePackage files.
 
+use thiserror::Error;
+
 pub mod utils;
 pub mod encryption;
 pub mod misc;
 pub mod runtime;
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum WoaVersion {
+    HM2016,
+    HM2,
+    HM3,
+}
+
+#[derive(Debug, Error)]
+pub enum GlacierResourceError{
+    #[error("Error reading the file: {0}")]
+    IoError(#[from] std::io::Error),
+
+    #[error("Couldn't read the resource {0}")]
+    ReadError(String),
+}
+
+pub trait GlacierResource : Sized  {
+    type Output;
+    fn process_data(woa_version: WoaVersion, data: impl IntoIterator<Item = u8>) -> Result<Self::Output, GlacierResourceError>;
+
+    fn serialize(_: &Self::Output, woa_version: WoaVersion) -> Result<Vec<u8>, GlacierResourceError>;
+
+    fn get_video_memory_requirement(_: &Self::Output) -> u64;
+    fn get_system_memory_requirement(_: &Self::Output) -> u64;
+}
+
+impl<I> GlacierResource for I
+    where
+        I: IntoIterator<Item = u8>
+{
+    type Output = Vec<u8>;
+
+    fn process_data(_: WoaVersion, data: impl IntoIterator<Item=u8>) -> Result<Self::Output, GlacierResourceError> {
+        let data: Vec<_> = data.into_iter().collect();
+        Ok(data)
+    }
+
+    fn serialize(resource: &Self::Output, _: WoaVersion) -> Result<Vec<u8>, GlacierResourceError> {
+        Ok(resource.clone())
+    }
+
+    fn get_video_memory_requirement(_: &Self::Output) -> u64 {
+        u64::MAX
+    }
+
+    fn get_system_memory_requirement(_: &Self::Output) -> u64 {
+        u64::MAX
+    }
+}
