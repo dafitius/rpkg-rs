@@ -4,7 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-hitman-xtea = { path = "./src/libs/hitman-xtea" }
 binrw = "0.11.2"
 modular-bitfield = "0.11.2"
 memmap2 = "0.7.1"
@@ -18,6 +17,8 @@ serde_json = { version = "1.0.107", optional = true }
 itertools = { version = "0.12.0", features = [] }
 thiserror = "1.0.56"
 md-5 = "0.10.6"
+extended-tea = "0.1.1"
+byteorder = "1.5.0"
 
 [features]
 default = ["serde"]
