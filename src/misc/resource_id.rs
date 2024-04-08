@@ -170,7 +170,7 @@ impl ResourceID {
         }
 
         let re = Regex::new(r"\[(.*?)\][^]]*$").unwrap();
-        if let Some(captures) = re.captures(&*self.uri) {
+        if let Some(captures) = re.captures(&self.uri) {
             if let Some(inner_string) = captures.get(1) {
                 if let Ok(rid) = ResourceID::from_string(inner_string.as_str()) {
                     return rid;
@@ -217,7 +217,7 @@ impl ResourceID {
 
     pub fn is_valid(&self) -> bool {
         {
-            self.uri.starts_with('[') && !self.uri.contains("unknown") && !self.uri.contains('*') && self.uri.contains("]")
+            self.uri.starts_with('[') && !self.uri.contains("unknown") && !self.uri.contains('*') && self.uri.contains(']')
         }
     }
 
