@@ -1,3 +1,6 @@
+//! Runtime identifier for a Glacier Resource.
+//! Can be derived from a [ResourceID] md5 digest
+
 use std::fmt;
 use std::fmt::{Debug, Formatter};
 use binrw::BinRead;
@@ -47,9 +50,11 @@ impl RuntimeResourceID {
     pub fn invalid() -> Self {
         Self{id: 0x00FFFFFFFFFFFFFF}
     }
+
+    /// Create RuntimeResourceID from ResourceID
     pub fn from_resource_id(rid: &ResourceID) -> Self {
 
-        let digest = Md5::digest(&rid.uri);
+        let digest = Md5::digest(&rid.get_resource_path());
         let mut hash = 0u64;
         for i in 1..8 {
             hash |= u64::from(digest[i]) << (8 * (7 - i));
@@ -60,6 +65,8 @@ impl RuntimeResourceID {
         }
     }
 
+    /// Create RuntimeResourceID from hexadecimal string
+    /// Also accepts 0x prefixed strings
     pub fn from_hex_string(hex_string: &str) -> Result<Self, RuntimeResourceIDError> {
 
         let hex_string = if let Some(hex_string) = hex_string.strip_prefix("0x") {

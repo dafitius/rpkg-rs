@@ -9,7 +9,7 @@ pub struct HM3Parser;
 impl PackageDefinitionParser for HM3Parser {
     fn parse(data: &[u8]) -> Result<Vec<PartitionInfo>, PackageDefinitionError> {
         let deciphered_data = match Xtea::is_encrypted_text_file(data) {
-            true => Xtea::decrypt_text_file(data, &Xtea::DEFAULT_KEY)?,
+            true => Xtea::decrypt_text_file(data)?,
             false => match String::from_utf8(data.to_vec()) {
                 Ok(v) => v,
                 Err(e) => return Err(PackageDefinitionError::TextEncodingError(e)),
@@ -46,7 +46,9 @@ impl PackageDefinitionParser for HM3Parser {
             } else if resource_path_regex.is_match(line) {
                 if let Some(m) = resource_path_regex.captures_iter(line).next() {
                     if let Some(current_partition) = partitions.last(){
-                        current_partition.roots.borrow_mut().push(ResourceID::from_string(format!("{}.pc_{}", &m[1], &m[2]).as_str()));
+                        if let Ok(rid) = ResourceID::from_string(format!("{}.{}", &m[1], &m[2]).as_str()){
+                            current_partition.roots.borrow_mut().push(rid);
+                        }
                     }
                     else {return Err(PackageDefinitionError::UnexpectedFormat("ResourceID defined before partition, are you using the correct game version?".to_string()))}
                 }

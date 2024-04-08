@@ -40,6 +40,22 @@ pub struct IniFileSection {
     options: HashMap<String, String>,
 }
 
+
+/// Represents a system config file for the Glacier engine
+/// ## Example contents
+///
+/// ```txt
+/// [application]
+/// ForceVSync=0
+/// CapWorkerThreads=1
+/// SCENE_FILE=assembly:/path/to/scene.entity
+/// ....
+///
+/// [Hitman5]
+/// usegamecontroller=1
+/// ConsoleCmd UI_EnableMouseEvents 0
+/// ....
+/// ```
 #[derive(Serialize)]
 pub struct IniFile {
     name: String,
@@ -49,6 +65,25 @@ pub struct IniFile {
     console_cmds: Vec<String>,
 }
 
+/// A hierarchical file system of [IniFile].
+///
+/// example usage:
+/// ```ignore
+///  use std::path::PathBuf;
+///  use rpkg_rs::misc::ini_file_system::IniFileSystem;
+///
+///  let retail_path = PathBuf::from("Path to retail folder");
+///  let thumbs_path = retail_path.join("thumbs.dat");
+///
+///  let thumbs = IniFileSystem::from(&thumbs_path.as_path())?;
+///
+///  let app_options = &thumbs.get_root()?;
+///
+///  if let (Some(proj_path), Some(runtime_path)) = (app_options.get_option("PROJECT_PATH"), app_options.get_option("RUNTIME_PATH")) {
+///     println!("Project path: {}", proj_path);
+///     println!("Runtime path: {}", runtime_path);
+///  }
+/// ```
 #[derive(Serialize)]
 pub struct IniFileSystem {
     root: IniFile,
@@ -127,16 +162,15 @@ impl IniFile {
     pub fn get_name(&self) -> String {
         self.name.to_string()
     }
-    pub fn get_sections(&self) -> Vec<&IniFileSection> {
+    pub fn get_all_sections(&self) -> Vec<&IniFileSection> {
         self.sections.values().collect()
     }
-
     pub fn get_section(&self, name: &str) -> Option<&IniFileSection> {
         self.sections.get(name)
     }
 
-    pub fn get_section_mut(&mut self, name: &str) -> Option<&mut IniFileSection> {
-        self.sections.get_mut(name)
+    pub fn get_include(&self, include_name: &str) -> Option<&IniFile>{
+        self.includes.iter().find(|incl| incl.name == include_name)
     }
 
     pub fn get_value(
@@ -203,6 +237,7 @@ impl IniFileSystem {
         Self { root: IniFile::new("thumbs.dat") }
     }
 
+    /// Loads an IniFileSystem from the given root file.
     pub fn load(&mut self, root_file: &impl AsRef<Path>) -> Result<(), IniFileError> {
         let ini_file = Self::load_from_path(root_file.as_ref(), PathBuf::from(root_file.as_ref()).parent().unwrap())?;
         self.root = ini_file;
@@ -221,7 +256,7 @@ impl IniFileSystem {
         let content = utils::get_file_as_byte_vec(path).map_err(IniFileError::IoError)?;
         let mut content_decrypted = from_utf8(content.as_ref()).unwrap_or("").to_string();
         if Xtea::is_encrypted_text_file(&content) {
-            content_decrypted = Xtea::decrypt_text_file(&content, &Xtea::DEFAULT_KEY).map_err(IniFileError::DecryptionError)?;
+            content_decrypted = Xtea::decrypt_text_file(&content).map_err(IniFileError::DecryptionError)?;
         }
 
         let ini_file_name = match diff_paths(path, working_directory) {
@@ -307,6 +342,7 @@ impl IniFileSystem {
         write_children_to_folder(folder, &self.root)
     }
 
+    /// Normalizes the IniFileSystem by merging sections and console commands from included files into the root file.
     pub fn normalize(&mut self) {
         let mut queue: VecDeque<IniFile> = VecDeque::new();
         for include in self.root.includes.drain(0..) {
@@ -342,6 +378,7 @@ impl IniFileSystem {
         }
     }
 
+    /// Retrieves all console commands from the IniFileSystem, including those from included files.
     pub fn get_console_cmds(&self) -> Vec<String> {
         let mut cmds: Vec<String> = vec![];
 
@@ -359,6 +396,7 @@ impl IniFileSystem {
         cmds
     }
 
+    /// Retrieves the value of an option in a section from the IniFileSystem, including values from included files.
     pub fn get_value(
         &self,
         section_name: &str,
@@ -382,8 +420,9 @@ impl IniFileSystem {
         latest_value.ok_or_else(|| IniFileError::OptionNotFound(option_name.to_string()))
     }
 
-    pub fn get_root(&self) -> Option<&IniFile> {
-        Some(&self.root)
+    /// Retrieves a reference to the root IniFile of the IniFileSystem.
+    pub fn get_root(&self) -> &IniFile {
+        &self.root
     }
 }
 

@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap};
 use std::fs::read_to_string;
 use std::path::Path;
 use rayon::prelude::{IntoParallelIterator};
@@ -16,18 +16,35 @@ pub enum PathListError {
     InvalidRuntimeResourceID,
 }
 
+/// A rainbow table of hashed paths with associated paths.
 #[derive(Default)]
 pub struct PathList {
     pub entries: HashMap<RuntimeResourceID, Option<ResourceID>>,
 }
 
 impl PathList {
+
+    /// Creates a new empty PathList.
     pub fn new() -> Self
     {
-        Self { entries: HashMap::new() }
+        Self::default()
     }
 
-    pub fn parse_into(&mut self, path: &Path, check_md5: bool) -> Result<&Self, PathListError> {
+    /// Parses a file into the PathList.
+    ///
+    /// Example of an input file:
+    /// ```txt
+    /// #comments will be ingored!
+    /// 00546F0BD4E80484.GFXI,[assembly:/any/path/here/file.jpg].pc_gfx
+    /// 0023456789ABCDEF.WWEM, this_will_fail_the_md5_validation
+    /// 003456789ABCDEF0.FXAS,[assembly:/lorem/ipsum/dolor_sit/amet/ai/consectetur/adipisicing.animset].pc_animset
+    /// ....
+    /// ```
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The path to the file to parse.
+    pub fn parse_into(&mut self, path: &Path) -> Result<&Self, PathListError> {
         let file_as_string = read_to_string(path).map_err(PathListError::IoError)?;
         let lines: Vec<_> = file_as_string
             .lines()
@@ -46,13 +63,8 @@ impl PathList {
 
             if let Ok(id) = u64::from_str_radix(hash, 16) {
                 if let Some(path) = path {
-                    let rid = ResourceID { uri: (path).to_string() };
-                    if !check_md5 {
-                        if rid.is_valid() {
-                            return Some((RuntimeResourceID::from(id), Some(rid)));
-                        }
-                    } else if RuntimeResourceID::from_resource_id(&rid) == id {
-                        return Some((RuntimeResourceID::from(id), Some(rid)));
+                    if let Ok(rid) =  ResourceID::from_string(path){
+                        if rid.is_valid() { return Some((RuntimeResourceID::from(id), Some(rid))); }
                     }
                 }
                 Some((RuntimeResourceID::from(id), None))
@@ -61,6 +73,7 @@ impl PathList {
 
         Ok(self)
     }
+
     pub fn get_resource_id(&self, key: &RuntimeResourceID) -> Option<&ResourceID>
     {
         if let Some(value) = self.entries.get(key) {
@@ -70,55 +83,5 @@ impl PathList {
             return None;
         }
         None
-    }
-
-    pub fn get_files(&self, query: &str) -> HashSet<String> {
-        let mut query_filtered = query.to_ascii_lowercase();
-        query_filtered.retain(|c| c as u8 > 0x1F);
-        let mut result = HashSet::default();
-        for path in self.entries.values().flatten() {
-            if let Some(path) = path.get_inner_most_resource_path() {
-                if path.starts_with(&query_filtered) {
-                    let p: String = path.chars().skip(query_filtered.len() + 1).collect();
-                    if !p.contains('/') {
-                        result.insert(p);
-                    }
-                }
-            }
-        }
-        result
-    }
-
-    pub fn get_folders(&self, query: &str) -> HashSet<String> {
-        let mut query_filtered = query.to_ascii_lowercase();
-        query_filtered.retain(|c| c as u8 > 0x1F);
-        let mut result = HashSet::default();
-        for path in self.entries.values().flatten() {
-            if let Some(path) = path.get_inner_most_resource_path() {
-                if path.starts_with(&query_filtered) {
-                    let path: String = path.chars().skip(query_filtered.len() + 1).collect();
-                    if let Some(n) = path.find('/') {
-                        let p: String = path.chars().take(n).collect();
-                        if !p.contains('.') {
-                            result.insert(p);
-                        }
-                    }
-                }
-            }
-        }
-        result
-    }
-
-    pub fn get_all_folders(&self) -> HashSet<String> {
-        let mut results: HashSet<String> = HashSet::new();
-
-        for (_, res_id) in self.entries.iter() {
-            if let Some(res_id) = res_id {
-                if let Some(path) = res_id.get_path() {
-                    results.insert(path);
-                }
-            }
-        }
-        results
     }
 }

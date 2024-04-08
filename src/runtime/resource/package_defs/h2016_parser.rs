@@ -9,7 +9,7 @@ pub struct H2016Parser;
 impl PackageDefinitionParser for H2016Parser {
     fn parse(data: &[u8]) -> Result<Vec<PartitionInfo>, PackageDefinitionError> {
         let deciphered_data = match Xtea::is_encrypted_text_file(data) {
-            true => Xtea::decrypt_text_file(data, &Xtea::DEFAULT_KEY)?,
+            true => Xtea::decrypt_text_file(data)?,
             false => match String::from_utf8(data.to_vec()) {
                 Ok(v) => v,
                 Err(e) => return Err(PackageDefinitionError::TextEncodingError(e)),
@@ -79,8 +79,9 @@ impl PackageDefinitionParser for H2016Parser {
                 },
                 line if resource_path_regex.is_match(trimmed_line) => {
                     if let Some(m) = resource_path_regex.captures_iter(line).next() {
-                        partitions.last().unwrap().roots.borrow_mut().push(ResourceID::from_string(format!("{}.pc_{}", &m[1], &m[2]).as_str()),
-                        );
+                        if let Ok(rid) = ResourceID::from_string(format!("{}.{}", &m[1], &m[2]).as_str()){
+                            partitions.last().unwrap().roots.borrow_mut().push(rid);
+                        }
                     }
                 }
                 _ => {}
