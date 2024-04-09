@@ -130,7 +130,7 @@ pub struct PartitionInfo {
     /// The patch level of the partition. Note: Custom patch levels set by most tools make this field unreliable for general use.
     patchlevel: usize,
     /// The list of resource IDs associated with this partition.
-    pub roots: RefCell<Vec<ResourceID>>,
+    pub roots: Vec<ResourceID>,
 }
 
 
@@ -143,7 +143,7 @@ impl PartitionInfo{
             parent: None,
             id: id.parse().map_err(PartitionInfoError::IdError)?,
             patchlevel: 0,
-            roots: RefCell::new(vec![]),
+            roots: vec![],
         })
     }
 

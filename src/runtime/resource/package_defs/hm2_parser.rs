@@ -46,14 +46,16 @@ impl PackageDefinitionParser for HM2Parser {
                                 index: partitions.iter().filter(|&p| p.id.part_type == part_type).count()
                             },
                             patchlevel: (m[2]).parse().unwrap(),
-                            roots: RefCell::new(vec![]),
+                            roots: vec![],
                         });
                     }
                 }
                 line if resource_path_regex.is_match(trimmed_line) => {
                     if let Some(m) = resource_path_regex.captures_iter(line).next() {
-                        if let Ok(rid) = ResourceID::from_string(format!("{}.{}", &m[1], &m[2]).as_str()) {
-                            partitions.last().unwrap().roots.borrow_mut().push(rid);
+                        if let Some(current_partition) = partitions.last_mut(){
+                            if let Ok(rid) = ResourceID::from_string(format!("{}.{}", &m[1], &m[2]).as_str()) {
+                                current_partition.add_root(rid);
+                            }
                         }
                     };
                 }

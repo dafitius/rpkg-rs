@@ -40,14 +40,14 @@ impl PackageDefinitionParser for HM3Parser {
                             index: partitions.len()
                         },
                         patchlevel: (m[4]).parse().unwrap(),
-                        roots: RefCell::new(vec![]),
+                        roots: vec![],
                     });
                 }
             } else if resource_path_regex.is_match(line) {
                 if let Some(m) = resource_path_regex.captures_iter(line).next() {
-                    if let Some(current_partition) = partitions.last(){
+                    if let Some(current_partition) = partitions.last_mut(){
                         if let Ok(rid) = ResourceID::from_string(format!("{}.{}", &m[1], &m[2]).as_str()){
-                            current_partition.roots.borrow_mut().push(rid);
+                            current_partition.add_root(rid);
                         }
                     }
                     else {return Err(PackageDefinitionError::UnexpectedFormat("ResourceID defined before partition, are you using the correct game version?".to_string()))}
