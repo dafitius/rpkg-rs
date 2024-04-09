@@ -1,16 +1,4 @@
-use std::fs;
-use std::fs::File;
-use std::io::Read;
 use std::path::{Component, Path, PathBuf};
-
-pub fn get_file_as_byte_vec(filename: &Path) -> Result<Vec<u8>, std::io::Error> {
-    let metadata = fs::metadata(filename)?;
-    let mut buffer = vec![0; metadata.len() as usize];
-
-    let mut f = File::open(filename)?;
-    f.read_exact(&mut buffer)?;
-    Ok(buffer)
-}
 
 pub fn normalize_path(path: &Path) -> PathBuf {
     let mut components = path.components().peekable();

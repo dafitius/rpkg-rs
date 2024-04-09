@@ -127,6 +127,7 @@ pub struct PartitionInfo {
     /// Example: "chunk9", "dlc12" or "dlc5langjp"
     pub id: PartitionId,
     /// The patch level of the partition. Note: Custom patch levels set by most tools make this field unreliable for general use.
+    #[allow(unused)]
     patchlevel: usize,
     /// The list of resource IDs associated with this partition.
     pub roots: Vec<ResourceID>,

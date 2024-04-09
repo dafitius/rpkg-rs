@@ -57,7 +57,7 @@ fn main() {
             }
         };
 
-        let package_defs_bytes = utils::get_file_as_byte_vec(runtime_path.join("packagedefinition.txt").as_path()).unwrap();
+        let package_defs_bytes = std::fs::read(runtime_path.join("packagedefinition.txt").as_path()).unwrap();
 
         let package_defs = match args[2].as_str(){
             "HM2016" => {PackageDefinitionSource::HM2016(package_defs_bytes).read()},

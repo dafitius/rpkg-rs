@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::str::from_utf8;
 use std::io::Write;
 use itertools::Itertools;
-use crate::{encryption::xtea::Xtea, utils};
+use crate::{encryption::xtea::Xtea};
 use pathdiff::diff_paths;
 use thiserror::Error;
 use crate::encryption::xtea::XteaError;
@@ -235,13 +235,13 @@ impl IniFileSystem {
     }
 
     /// Loads an IniFileSystem from the given root file.
-    pub fn load(&mut self, root_file: &impl AsRef<Path>) -> Result<(), IniFileError> {
+    pub fn load(&mut self, root_file: impl AsRef<Path>) -> Result<(), IniFileError> {
         let ini_file = Self::load_from_path(root_file.as_ref(), PathBuf::from(root_file.as_ref()).parent().unwrap())?;
         self.root = ini_file;
         Ok(())
     }
 
-    pub fn from(root_file: &impl AsRef<Path>) -> Result<Self, IniFileError> {
+    pub fn from(root_file: impl AsRef<Path>) -> Result<Self, IniFileError> {
         let mut ret = Self::new();
         match ret.load(root_file) {
             Ok(_) => { Ok(ret) }
@@ -250,7 +250,7 @@ impl IniFileSystem {
     }
 
     fn load_from_path(path: &Path, working_directory: &Path) -> Result<IniFile, IniFileError> {
-        let content = utils::get_file_as_byte_vec(path).map_err(IniFileError::IoError)?;
+        let content = fs::read(path).map_err(IniFileError::IoError)?;
         let mut content_decrypted = from_utf8(content.as_ref()).unwrap_or("").to_string();
         if Xtea::is_encrypted_text_file(&content) {
             content_decrypted = Xtea::decrypt_text_file(&content).map_err(IniFileError::DecryptionError)?;

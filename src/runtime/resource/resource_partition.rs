@@ -190,9 +190,9 @@ impl ResourcePartition {
     }
 
     pub fn get_latest_resources(&self) -> Vec<&ResourceInfo> {
-        self.resources.iter().map(|(rrid, idx)| {
+        self.resources.iter().flat_map(|(rrid, idx)| {
             self.get_resource_info_from(rrid, idx)
-        }).flatten().collect()
+        }).collect()
     }
 
     pub fn get_resource(&self, rrid: &RuntimeResourceID) -> Result<Vec<u8>, ResourcePartitionError> {

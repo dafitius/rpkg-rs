@@ -1,4 +1,3 @@
-use std::cmp::PartialEq;
 use std::path::{PathBuf};
 use itertools::Itertools;
 use thiserror::Error;
