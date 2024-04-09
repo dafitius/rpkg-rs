@@ -5,7 +5,6 @@ pub mod hm2_parser;
 pub mod h2016_parser;
 
 use crate::runtime::resource::resource_partition::PatchId;
-use std::cell::RefCell;
 use std::fmt::Display;
 use std::str::FromStr;
 use regex::Regex;
@@ -53,7 +52,7 @@ pub enum PartitionType {
     LanguageDlc(String),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct PartitionId {
     pub part_type: PartitionType,
     pub index: usize,

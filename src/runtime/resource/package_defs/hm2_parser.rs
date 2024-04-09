@@ -1,4 +1,3 @@
-use std::cell::RefCell;
 use regex::Regex;
 use crate::encryption::xtea::Xtea;
 use crate::misc::resource_id::ResourceID;

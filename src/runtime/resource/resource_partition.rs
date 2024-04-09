@@ -189,6 +189,12 @@ impl ResourcePartition {
         self.packages.len().saturating_sub(1)
     }
 
+    pub fn get_latest_resources(&self) -> Vec<&ResourceInfo> {
+        self.resources.iter().map(|(rrid, idx)| {
+            self.get_resource_info_from(rrid, idx)
+        }).flatten().collect()
+    }
+
     pub fn get_resource(&self, rrid: &RuntimeResourceID) -> Result<Vec<u8>, ResourcePartitionError> {
         let package_index = self.resources.get(rrid).ok_or(ResourcePartitionError::ResourceNotAvailable)?;
         let rpkg = self.packages.get(package_index).ok_or(ResourcePartitionError::NotMounted)?;

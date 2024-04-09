@@ -3,7 +3,7 @@ use std::io::{stdin, Write};
 use std::path::PathBuf;
 use rpkg_rs::misc::ini_file_system::IniFileSystem;
 use rpkg_rs::misc::resource_id::ResourceID;
-use rpkg_rs::runtime::resource::package_defs::{PackageDefinitionSource};
+use rpkg_rs::runtime::resource::package_defs::{PackageDefinitionSource, PartitionId};
 use rpkg_rs::runtime::resource::partition_manager::{PartitionManager, PartitionState};
 use rpkg_rs::runtime::resource::runtime_resource_id::RuntimeResourceID;
 use rpkg_rs::utils;
@@ -90,8 +90,8 @@ fn main() {
 
             let rrid = RuntimeResourceID::from_resource_id(&rid);
             println!("Try to find {}", rrid);
-            match package_manager.get_resource_info_from(0, rrid) {
-                Ok(info) => {println!("Managed to find {}.{}", rrid, info.header.get_type())}
+            match package_manager.get_resource_info_from("chunk0".parse().unwrap(), rrid) {
+                Ok(info) => {println!("Managed to find {}.{}", rrid, info.get_type())}
                 Err(e) => {eprintln!("error: {}", e)}
             }
         }

@@ -202,7 +202,7 @@ impl PackageOffsetInfo {
 #[derive(BinRead)]
 pub struct ResourceHeader
 {
-    m_type: [u8; 4],
+    pub m_type: [u8; 4],
     references_chunk_size: u32,
     states_chunk_size: u32,
     pub data_size: u32,
@@ -211,12 +211,6 @@ pub struct ResourceHeader
 
     #[br(if (references_chunk_size > 0))]
     pub m_references: Option<ResourceReferences>,
-}
-
-impl ResourceHeader {
-    pub fn get_type(&self) -> String {
-        String::from_utf8_lossy(&self.m_type).into_owned().chars().rev().collect()
-    }
 }
 
 #[allow(dead_code)]

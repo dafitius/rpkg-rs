@@ -1,8 +1,9 @@
+use std::cmp::PartialEq;
 use std::path::{PathBuf};
 use itertools::Itertools;
 use thiserror::Error;
 
-use crate::runtime::resource::package_defs::{PackageDefinitionError, PackageDefinitionSource, PartitionInfo};
+use crate::runtime::resource::package_defs::{PackageDefinitionError, PackageDefinitionSource, PartitionId, PartitionInfo};
 use crate::runtime::resource::resource_info::ResourceInfo;
 use crate::runtime::resource::runtime_resource_id::{RuntimeResourceID};
 use super::resource_partition::{PatchId, ResourcePartition, ResourcePartitionError};
@@ -22,8 +23,8 @@ pub enum PackageManagerError {
 #[allow(dead_code)]
 #[derive(Clone, Debug, Copy)]
 pub struct PartitionState {
-    pub(crate) installing: bool,
-    pub(crate) mounted: bool,
+    pub installing: bool,
+    pub mounted: bool,
     pub install_progress: f32,
 }
 
@@ -78,32 +79,36 @@ impl PartitionManager {
         Ok(())
     }
 
-    pub fn get_resource_from(&self, partition_index: usize, rrid: RuntimeResourceID) -> Result<Vec<u8>, PackageManagerError> {
-        let partition = self.partitions.iter().find(|partition| partition.get_partition_info().id.index == partition_index);
+    pub fn get_resource_from(&self, partition_id: PartitionId, rrid: RuntimeResourceID) -> Result<Vec<u8>, PackageManagerError> {
+        let partition = self.partitions.iter().find(|partition| partition.get_partition_info().id == partition_id);
         if let Some(partition) = partition {
             match partition.get_resource(&rrid) {
                 Ok(data) => { Ok(data) }
                 Err(e) => { Err(PackageManagerError::PartitionError(e)) }
             }
         } else {
-            Err(PackageManagerError::PartitionNotFound(partition_index.to_string()))
+            Err(PackageManagerError::PartitionNotFound(partition_id.to_string()))
         }
     }
 
-    pub fn get_partition(&self, partition_index: usize) -> Result<&ResourcePartition, PackageManagerError> {
-        let partition = self.partitions.iter().find(|partition| partition.get_partition_info().id.index == partition_index).ok_or(PackageManagerError::PartitionNotFound(partition_index.to_string()))?;
+    pub fn get_partition(&self, partition_id: PartitionId) -> Result<&ResourcePartition, PackageManagerError> {
+        let partition = self.partitions.iter().find(|partition| partition.get_partition_info().id == partition_id).ok_or(PackageManagerError::PartitionNotFound(partition_id.to_string()))?;
         Ok(partition)
     }
 
-    pub fn get_resource_info_from(&self, partition_index: usize, rrid: RuntimeResourceID) -> Result<&ResourceInfo, PackageManagerError> {
-        let partition = self.partitions.iter().find(|partition| partition.get_partition_info().id.index == partition_index);
+    pub fn get_all_partitions(&self) -> Vec<&ResourcePartition>{
+        self.partitions.iter().collect::<Vec<&ResourcePartition>>()
+    }
+
+    pub fn get_resource_info_from(&self, partition_id: PartitionId, rrid: RuntimeResourceID) -> Result<&ResourceInfo, PackageManagerError> {
+        let partition = self.partitions.iter().find(|partition| partition.get_partition_info().id == partition_id);
         if let Some(partition) = partition {
             match partition.get_resource_info(&rrid) {
                 Ok(info) => { Ok(info) }
                 Err(e) => { Err(PackageManagerError::PartitionError(e)) }
             }
         } else {
-            Err(PackageManagerError::PartitionNotFound(partition_index.to_string()))
+            Err(PackageManagerError::PartitionNotFound(partition_id.to_string()))
         }
     }
 
