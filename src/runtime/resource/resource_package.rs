@@ -199,7 +199,6 @@ impl PackageOffsetInfo {
 }
 
 #[allow(dead_code)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(BinRead)]
 pub struct ResourceHeader
 {
@@ -221,7 +220,6 @@ impl ResourceHeader {
 }
 
 #[allow(dead_code)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(BinRead)]
 pub struct ResourceReferences
 {
@@ -242,7 +240,6 @@ impl ResourceReferences {
 
 #[allow(dead_code)]
 #[bitfield]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(BinRead)]
 #[br(map = Self::from_bytes)]
 pub struct ResourceReferenceFlags

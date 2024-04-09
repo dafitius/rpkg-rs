@@ -3,7 +3,6 @@ use std::collections::VecDeque;
 use std::ops::{Index, IndexMut};
 use std::path::PathBuf;
 use std::str::from_utf8;
-use serde::Serialize;
 use std::io::Write;
 use itertools::Itertools;
 use crate::{encryption::xtea::Xtea, utils};
@@ -34,7 +33,7 @@ pub enum IniFileError {
     InvalidInput(String),
 }
 
-#[derive(Default, Serialize, Debug)]
+#[derive(Default, Debug)]
 pub struct IniFileSection {
     name: String,
     options: HashMap<String, String>,
@@ -56,7 +55,6 @@ pub struct IniFileSection {
 /// ConsoleCmd UI_EnableMouseEvents 0
 /// ....
 /// ```
-#[derive(Serialize)]
 pub struct IniFile {
     name: String,
     description: Option<String>,
@@ -84,7 +82,6 @@ pub struct IniFile {
 ///     println!("Runtime path: {}", runtime_path);
 ///  }
 /// ```
-#[derive(Serialize)]
 pub struct IniFileSystem {
     root: IniFile,
 }

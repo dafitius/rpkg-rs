@@ -20,7 +20,6 @@ pub enum RuntimeResourceIDError {
 
 /// Represents a runtime resource identifier.
 #[derive(BinRead, Default, PartialEq, Eq, Hash, Clone, Copy)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct RuntimeResourceID
 {
     id: u64,
