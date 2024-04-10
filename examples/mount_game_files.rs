@@ -30,8 +30,6 @@ fn main() {
     if let (Some(proj_path), Some(relative_runtime_path)) = (app_options.get_option("PROJECT_PATH"), app_options.get_option("RUNTIME_PATH")) {
 
         let runtime_path = PathBuf::from(format!("{}\\{proj_path}\\{relative_runtime_path}", retail_path.display()));
-        let runtime_path = utils::normalize_path(runtime_path.as_path());
-        let runtime_path = PathBuf::from("/media/dafitius/980 PRO/Steam/steamapps/common/HITMAN 3/Retail/../Runtime");
         std::println!("start reading package definitions {:?}", runtime_path);
 
         let mut package_manager = PartitionManager::new(runtime_path.clone());
@@ -74,6 +72,7 @@ fn main() {
             std::process::exit(0);
         });
 
+        //ignore modded patches
         for partition in package_defs.iter_mut(){
             partition.patch_level = 9
         }

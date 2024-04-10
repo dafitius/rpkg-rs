@@ -20,6 +20,10 @@ impl ResourceInfo{
     pub fn get_compressed_size(&self) -> usize
     { self.entry.get_compressed_size() }
 
+    pub fn get_size(&self) -> u32 {
+        self.header.data_size
+    }
+
     pub fn get_rrid(&self) -> &RuntimeResourceID{ &self.entry.runtime_resource_id }
 
     pub fn get_type(&self) -> String {
@@ -42,6 +46,27 @@ impl ResourceInfo{
             }
         }
         map
+    }
+
+    pub fn get_system_memory_requirement(&self) -> u32 {
+        self.header.system_memory_requirement
+    }
+
+    pub fn get_video_memory_requirement(&self) -> u32 {
+        self.header.video_memory_requirement
+    }
+
+    //The following function should be removed eventually
+    pub fn get_data_offset(&self) -> u64{ self.entry.data_offset }
+
+    pub fn get_states_chunk_size(&self) -> usize{ 0 }
+
+    pub fn get_reference_chunk_size(&self) -> usize {
+        if let Some(references) = &self.header.m_references{
+            0x4 + (references.reference_hash.len() * 0x9)
+        } else {
+            0x0
+        }
     }
 }
 
