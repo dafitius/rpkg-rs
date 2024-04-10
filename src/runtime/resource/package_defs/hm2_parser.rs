@@ -44,7 +44,7 @@ impl PackageDefinitionParser for HM2Parser {
                                 part_type: part_type.clone(),
                                 index: partitions.iter().filter(|&p| p.id.part_type == part_type).count()
                             },
-                            patchlevel: (m[2]).parse().unwrap(),
+                            patch_level: (m[2]).parse().unwrap(),
                             roots: vec![],
                         });
                     }

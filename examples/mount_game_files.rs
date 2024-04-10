@@ -30,6 +30,8 @@ fn main() {
     if let (Some(proj_path), Some(relative_runtime_path)) = (app_options.get_option("PROJECT_PATH"), app_options.get_option("RUNTIME_PATH")) {
 
         let runtime_path = PathBuf::from(format!("{}\\{proj_path}\\{relative_runtime_path}", retail_path.display()));
+        let runtime_path = utils::normalize_path(runtime_path.as_path());
+        let runtime_path = PathBuf::from("/media/dafitius/980 PRO/Steam/steamapps/common/HITMAN 3/Retail/../Runtime");
         std::println!("start reading package definitions {:?}", runtime_path);
 
         let mut package_manager = PartitionManager::new(runtime_path.clone());
@@ -59,7 +61,7 @@ fn main() {
 
         let package_defs_bytes = std::fs::read(runtime_path.join("packagedefinition.txt").as_path()).unwrap();
 
-        let package_defs = match args[2].as_str(){
+        let mut package_defs = match args[2].as_str(){
             "HM2016" => {PackageDefinitionSource::HM2016(package_defs_bytes).read()},
             "HM2" => {PackageDefinitionSource::HM2(package_defs_bytes).read()},
             "HM3" => {PackageDefinitionSource::HM3(package_defs_bytes).read()},
@@ -67,9 +69,16 @@ fn main() {
                 eprintln!("invalid game version: {}", e);
                 std::process::exit(0);
             }
-        };
+        }.unwrap_or_else(|e|{
+            println!("Failed to parse package definitions");
+            std::process::exit(0);
+        });
 
-        package_manager.mount_partitions(PackageDefinitionSource::Custom(package_defs.unwrap()), progress_callback).unwrap_or_else(|e|{
+        for partition in package_defs.iter_mut(){
+            partition.patch_level = 9
+        }
+
+        package_manager.mount_partitions(PackageDefinitionSource::Custom(package_defs), progress_callback).unwrap_or_else(|e|{
             eprintln!("failed to init package manager: {}", e);
             std::process::exit(0);
         });

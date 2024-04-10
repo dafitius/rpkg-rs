@@ -86,7 +86,7 @@ impl ResourcePartition {
 
     /// search through the package_dir to figure out which patch indices are there.
     /// We have to use this inside of using the patchlevel inside the PartitionInfo.
-    fn get_patch_indices(&self, package_dir: &PathBuf) -> Result<Vec<usize>, ResourcePartitionError> {
+    fn get_patch_indices(&self, package_dir: &PathBuf) -> Result<Vec<PatchId>, ResourcePartitionError> {
         let mut patch_indices = vec![];
 
         let filename = self.info.get_filename(&PatchId::Base);
@@ -106,7 +106,10 @@ impl ResourcePartition {
             let path = path_buf.as_path().to_str().unwrap_or("").replace('\\', "/");
             if patch_package_re.is_match(path.as_str()) {
                 let cap = patch_package_re.captures(path.as_str()).unwrap();
-                patch_indices.push(cap[1].parse::<usize>()?);
+                let patch_level = cap[1].parse::<usize>()?;
+                if patch_level <= self.info.patch_level {
+                    patch_indices.push(PatchId::Patch(patch_level));
+                }
             }
         }
         patch_indices.sort();
@@ -130,23 +133,25 @@ impl ResourcePartition {
 
         //maybe don't error on a missing partition? the game doesn't...
         //let patch_indices = self.get_patch_indices(runtime_path)?;
-
         let patch_idx_result = self.get_patch_indices(runtime_path);
+
         if patch_idx_result.is_err() {
             state.installing = false;
             return Ok(());
         }
+
+        println!("{}: {:?}", &self.info.id, &patch_idx_result);
 
         let patch_indices = patch_idx_result.unwrap();
 
         let base_package_path = runtime_path.join(self.info.get_filename(&PatchId::Base));
         self.mount_package(base_package_path.as_path(), PatchId::Base)?;
 
-        for (index, patch_index) in patch_indices.iter().enumerate() {
+        for (index, patch_id) in patch_indices.iter().enumerate() {
             let patch_package_path = runtime_path.join(
-                self.info.get_filename(&PatchId::Patch(*patch_index))
+                self.info.get_filename(patch_id)
             );
-            self.mount_package(patch_package_path.as_path(), PatchId::Patch(*patch_index))?;
+            self.mount_package(patch_package_path.as_path(), *patch_id)?;
 
             state.install_progress = index as f32 / patch_indices.len() as f32;
             progress_callback(&state);

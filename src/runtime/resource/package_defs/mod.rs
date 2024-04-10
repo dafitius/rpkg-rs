@@ -126,9 +126,8 @@ pub struct PartitionInfo {
     /// The identifier of the partition.
     /// Example: "chunk9", "dlc12" or "dlc5langjp"
     pub id: PartitionId,
-    /// The patch level of the partition. Note: Custom patch levels set by most tools make this field unreliable for general use.
-    #[allow(unused)]
-    patchlevel: usize,
+    /// The patch level of the partition. Note: This is used an an upper bound, any patch above this level will be ignored.
+    pub patch_level: usize,
     /// The list of resource IDs associated with this partition.
     pub roots: Vec<ResourceID>,
 }
@@ -142,7 +141,7 @@ impl PartitionInfo{
             name: None,
             parent: None,
             id: id.parse().map_err(PartitionInfoError::IdError)?,
-            patchlevel: 0,
+            patch_level: 0,
             roots: vec![],
         })
     }

@@ -19,12 +19,12 @@ impl PackageDefinitionParser for HM3Parser {
 
         //define the regex
         let partition_regex =
-            Regex::new(r"@partition name=(.+?) parent=(.+?) type=(.+?) patchlevel=(.+?)")
+            Regex::new(r"@partition name=(.+?) parent=(.+?) type=(.+?) patchlevel=(.\d*)")
                 .unwrap();
         let resource_path_regex = Regex::new(r"(\[[a-z]+:/.+?]).([a-z]+)").unwrap();
 
         //try to match the regex on a per-line basis
-        for line in deciphered_data.split("\r\n").collect::<Vec<&str>>() {
+        for line in deciphered_data.lines(){
             if partition_regex.is_match(line) {
                 if let Some(m) = partition_regex.captures_iter(line).next() {
                     partitions.push(PartitionInfo {
@@ -38,7 +38,7 @@ impl PackageDefinitionParser for HM3Parser {
                             },
                             index: partitions.len()
                         },
-                        patchlevel: (m[4]).parse().unwrap(),
+                        patch_level: (m[4]).parse().unwrap(),
                         roots: vec![],
                     });
                 }
@@ -49,7 +49,8 @@ impl PackageDefinitionParser for HM3Parser {
                             current_partition.add_root(rid);
                         }
                     }
-                    else {return Err(PackageDefinitionError::UnexpectedFormat("ResourceID defined before partition, are you using the correct game version?".to_string()))}
+                    else {
+                        return Err(PackageDefinitionError::UnexpectedFormat("ResourceID defined before partition, are you using the correct game version?".to_string()))}
                 }
             }
         }

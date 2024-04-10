@@ -48,7 +48,7 @@ impl PackageDefinitionParser for H2016Parser {
                                 part_type: part_type.clone(),
                                 index: partitions.iter().filter(|&p| p.id.part_type == part_type).count(),
                             },
-                            patchlevel: (m[2]).parse().unwrap(),
+                            patch_level: (m[2]).parse().unwrap(),
                             roots: vec![],
                         });
                     }
@@ -69,7 +69,7 @@ impl PackageDefinitionParser for H2016Parser {
                                     },
                                     index: partition.id.index,
                                 },
-                                patchlevel: 0, //doesn't matter, this will be checked later
+                                patch_level: 0, //doesn't matter, this will be checked later
                                 roots: vec![],
                             });
                         }
