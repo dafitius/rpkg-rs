@@ -194,11 +194,9 @@ impl ResourcePartition {
         self.packages.len().saturating_sub(1)
     }
 
-    pub fn get_latest_resources(&self) -> Vec<(&ResourceInfo, &PatchId)> {
-        self.resources.iter().flat_map(|(rrid, idx)| {
-            if let Ok(info) = self.get_resource_info_from(rrid, idx){
-                Some((info, idx))
-            }else {None}
+    pub fn get_latest_resources(&self) -> Result<Vec<(&ResourceInfo, &PatchId)>> {
+        self.resources.iter().map(|(rrid, idx)| {
+            Ok((self.get_resource_info_from(rrid, idx)?, idx))
         }).collect()
     }
 
