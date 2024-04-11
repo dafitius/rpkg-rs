@@ -68,7 +68,7 @@ fn main() {
                 std::process::exit(0);
             }
         }.unwrap_or_else(|e|{
-            println!("Failed to parse package definitions");
+            println!("Failed to parse package definitions {}", e);
             std::process::exit(0);
         });
 
@@ -98,10 +98,8 @@ fn main() {
 
             let rrid = RuntimeResourceID::from_resource_id(&rid);
             println!("Try to find {}", rrid);
-            match package_manager.get_resource_info_from("chunk0".parse().unwrap(), rrid) {
-                Ok(info) => {println!("Managed to find {}.{}", rrid, info.get_type())}
-                Err(e) => {eprintln!("error: {}", e)}
-            }
+            package_manager.print_resource_changelog(&rrid)
+
         }
     } else {
         eprintln!("Missing required properties inside thumbs.dat:\n\
