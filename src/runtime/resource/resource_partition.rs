@@ -140,8 +140,6 @@ impl ResourcePartition {
             return Ok(());
         }
 
-        println!("{}: {:?}", &self.info.id, &patch_idx_result);
-
         let patch_indices = patch_idx_result.unwrap();
 
         let base_package_path = runtime_path.join(self.info.get_filename(&PatchId::Base));
