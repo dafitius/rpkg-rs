@@ -38,7 +38,7 @@ pub enum GlacierResourceError{
 
 pub trait GlacierResource : Sized  {
     type Output;
-    fn process_data(woa_version: WoaVersion, data: impl IntoIterator<Item = u8>) -> Result<Self::Output, GlacierResourceError>;
+    fn process_data<R: AsRef<[u8]>>(woa_version: WoaVersion, data: R) -> Result<Self::Output, GlacierResourceError>;
 
     fn serialize(_: &Self::Output, woa_version: WoaVersion) -> Result<Vec<u8>, GlacierResourceError>;
 
@@ -52,8 +52,8 @@ impl<I> GlacierResource for I
 {
     type Output = Vec<u8>;
 
-    fn process_data(_: WoaVersion, data: impl IntoIterator<Item=u8>) -> Result<Self::Output, GlacierResourceError> {
-        let data: Vec<_> = data.into_iter().collect();
+    fn process_data<R: AsRef<[u8]>>(_: WoaVersion, data: R) -> Result<Self::Output, GlacierResourceError> {
+        let data: Vec<_> = data.as_ref().to_vec();
         Ok(data)
     }
 
