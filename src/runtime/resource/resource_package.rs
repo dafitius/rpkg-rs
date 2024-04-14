@@ -169,9 +169,7 @@ pub struct PackageMetadata {
     pub chunk_id: u8,
     pub chunk_type: u8,
     pub patch_id: u8,
-
-    pub unknown1: u8,
-    pub unknown2: u8,
+    pub language_tag: [u8; 2], //this is presumably an unused language code, is always 'xx'
 }
 
 #[allow(dead_code)]
