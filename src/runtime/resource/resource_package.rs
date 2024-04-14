@@ -209,27 +209,8 @@ pub struct ResourceHeader
     pub system_memory_requirement: u32,
     pub video_memory_requirement: u32,
 
-    #[br(if (references_chunk_size > 0))]
-    pub m_references: Option<ResourceReferences>,
-}
-
-#[allow(dead_code)]
-#[derive(BinRead)]
-pub struct ResourceReferences
-{
-    reference_count: u32,
-
-    #[br(little, count = reference_count & 0x3FFFFFFF)]
-    pub reference_flags: Vec<ResourceReferenceFlags>,
-
-    #[br(little, count = reference_count & 0x3FFFFFFF)]
-    pub reference_hash: Vec<RuntimeResourceID>,
-}
-
-impl ResourceReferences {
-    pub fn get_resource_count(&self) -> u32 {
-        self.reference_count & 0x3FFFFFFF
-    }
+    #[br(if (references_chunk_size > 0), parse_with=read_references)]
+    pub references: HashMap<RuntimeResourceID, ResourceReferenceFlags>,
 }
 
 #[allow(dead_code)]
@@ -254,6 +235,39 @@ pub enum ReferenceType
     NORMAL = 1,
     WEAK = 2,
 }
+
+#[parser(reader)]
+fn read_references() -> BinResult<HashMap<RuntimeResourceID, ResourceReferenceFlags>> {
+    let reference_count_and_flag = u32::read_le(reader)?;
+    let reference_count = reference_count_and_flag  & 0x3FFFFFFF;
+
+    let arrays = if reference_count_and_flag & 0x40000000 == 0x40000000 {
+        let flags : Vec<ResourceReferenceFlags> = (0..reference_count).map(|_| -> BinResult<ResourceReferenceFlags>{
+            ResourceReferenceFlags::read_le(reader)
+        }).collect::<BinResult<Vec<_>>>()?;
+        let rrids : Vec<RuntimeResourceID> = (0..reference_count).map(|_| -> BinResult<RuntimeResourceID>{
+            RuntimeResourceID::read_le(reader)
+        }).collect::<BinResult<Vec<_>>>()?;
+
+
+        (rrids, flags)
+    }else{
+        let rrids : Vec<RuntimeResourceID> = (0..reference_count).map(|_| -> BinResult<RuntimeResourceID> {
+            RuntimeResourceID::read_le(reader)
+        }).collect::<BinResult<Vec<_>>>()?;
+
+        let flags : Vec<ResourceReferenceFlags> = (0..reference_count).map(|_| -> BinResult<ResourceReferenceFlags>{
+            ResourceReferenceFlags::read_le(reader)
+        }).collect::<BinResult<Vec<_>>>()?;
+
+        (rrids, flags)
+    };
+
+    Ok(arrays.0.into_iter()
+        .zip(arrays.1)
+        .collect::<HashMap<_, _>>())
+}
+
 
 impl fmt::Display for PackageOffsetInfo {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

@@ -1,5 +1,5 @@
+use std::collections::HashMap;
 use std::fmt;
-use std::iter::zip;
 use crate::runtime::resource::runtime_resource_id::RuntimeResourceID;
 
 use super::{resource_package::*};
@@ -31,21 +31,11 @@ impl ResourceInfo{
     }
 
     pub fn get_reference(&self, index: usize) -> Option<(&RuntimeResourceID, &ResourceReferenceFlags)>{
-        if let Some(references) = &self.header.m_references{
-            if let (Some(rrid), Some(flag)) = (references.reference_hash.get(index), references.reference_flags.get(index)){
-                Some((rrid, flag))
-            }else{ None }
-        }else{ None }
+        self.header.references.iter().nth(index)
     }
 
-    pub fn get_all_references(&self) -> Vec<(&RuntimeResourceID, &ResourceReferenceFlags)> {
-        let mut map = vec![];
-        if let Some(references) = &self.header.m_references{
-            for (rrid, flag) in zip(&references.reference_hash, &references.reference_flags){
-                map.push((rrid, flag));
-            }
-        }
-        map
+    pub fn get_all_references(&self) -> &HashMap<RuntimeResourceID, ResourceReferenceFlags> {
+        &self.header.references
     }
 
     pub fn get_system_memory_requirement(&self) -> u32 {
@@ -62,10 +52,9 @@ impl ResourceInfo{
     pub fn get_states_chunk_size(&self) -> usize{ 0 }
 
     pub fn get_reference_chunk_size(&self) -> usize {
-        if let Some(references) = &self.header.m_references{
-            0x4 + (references.reference_hash.len() * 0x9)
-        } else {
-            0x0
+        match &self.header.references.len() {
+            0 => {0x0}
+            n => { 0x4 + (n * 0x9) }
         }
     }
 }
