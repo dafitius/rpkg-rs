@@ -118,7 +118,8 @@ impl ResourcePackage {
         let resource = self
             .resources
             .get(rrid).ok_or(ResourcePackageError::ResourceNotFound)?;
-        let compressed_size = resource.get_compressed_size();
+        let final_size = resource.get_compressed_size().unwrap_or(resource.header.data_size as usize);
+
         let is_lz4ed = resource.get_is_compressed();
         let is_scrambled = resource.get_is_scrambled();
 
@@ -127,7 +128,7 @@ impl ResourcePackage {
 
         file.seek(io::SeekFrom::Start(resource.entry.data_offset)).unwrap();
 
-        let mut buffer = vec![0; if is_lz4ed { compressed_size } else { resource.header.data_size as usize }];
+        let mut buffer = vec![0; final_size];
         file.read_exact(&mut buffer).unwrap();
 
         if is_scrambled {

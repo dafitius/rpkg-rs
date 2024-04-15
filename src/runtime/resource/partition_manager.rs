@@ -118,10 +118,7 @@ impl PartitionManager {
             let mut last_occurence: Option<&ResourceInfo> = None;
 
             let get_size = |info: &ResourceInfo| {
-                match info.get_is_compressed() {
-                    true => { info.get_compressed_size() }
-                    false => { info.header.data_size as usize }
-                }
+                 info.get_compressed_size().unwrap_or(info.header.data_size as usize)
             };
 
             let changes = partition.get_resource_patch_indices(rrid);

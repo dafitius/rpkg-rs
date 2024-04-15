@@ -22,7 +22,7 @@ impl ResourceInfo{
     }
 
     pub fn get_reference(&self, index: usize) -> Option<&(RuntimeResourceID, ResourceReferenceFlags)>{
-        self.header.references.iter().nth(index)
+        self.header.references.get(index)
     }
 
     pub fn get_all_references(&self) -> &Vec<(RuntimeResourceID, ResourceReferenceFlags)> {
