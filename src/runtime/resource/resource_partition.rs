@@ -87,6 +87,7 @@ impl ResourcePartition {
     /// search through the package_dir to figure out which patch indices are there.
     /// We have to use this inside of using the patchlevel inside the PartitionInfo.
     fn get_patch_indices(&self, package_dir: &PathBuf) -> Result<Vec<PatchId>, ResourcePartitionError> {
+        //TODO: Stop using paths for this. Just filenames should be enough
         let mut patch_indices = vec![];
 
         let filename = self.info.get_filename(&PatchId::Base);
