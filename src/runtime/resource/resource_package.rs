@@ -36,7 +36,7 @@ pub struct ResourcePackage {
 
     header: PackageHeader,
 
-    #[br(if (is_patch && metadata.as_ref().map_or(true, | m | m.patch_id > 0)))]
+    #[br(if (is_patch && header.table_offset != 0 && metadata.as_ref().map_or(true, | m | m.patch_id > 0)))]
     unneeded_resource_count: u32,
 
     #[br(if (is_patch))]
