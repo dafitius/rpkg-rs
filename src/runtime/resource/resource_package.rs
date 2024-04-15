@@ -208,7 +208,7 @@ pub struct ResourceHeader
     pub video_memory_requirement: u32,
 
     #[br(if (references_chunk_size > 0), parse_with=read_references)]
-    pub references: HashMap<RuntimeResourceID, ResourceReferenceFlags>,
+    pub references: Vec<(RuntimeResourceID, ResourceReferenceFlags)>,
 }
 
 #[allow(dead_code)]
@@ -235,7 +235,7 @@ pub enum ReferenceType
 }
 
 #[parser(reader)]
-fn read_references() -> BinResult<HashMap<RuntimeResourceID, ResourceReferenceFlags>> {
+fn read_references() -> BinResult<Vec<(RuntimeResourceID, ResourceReferenceFlags)>> {
     let reference_count_and_flag = u32::read_le(reader)?;
     let reference_count = reference_count_and_flag  & 0x3FFFFFFF;
 
@@ -263,7 +263,7 @@ fn read_references() -> BinResult<HashMap<RuntimeResourceID, ResourceReferenceFl
 
     Ok(arrays.0.into_iter()
         .zip(arrays.1)
-        .collect::<HashMap<_, _>>())
+        .collect::<Vec<(_, _)>>())
 }
 
 

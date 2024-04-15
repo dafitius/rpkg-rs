@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::fmt;
 use crate::runtime::resource::runtime_resource_id::RuntimeResourceID;
 
@@ -30,11 +29,11 @@ impl ResourceInfo{
         String::from_utf8_lossy(&self.header.m_type).into_owned().chars().rev().collect()
     }
 
-    pub fn get_reference(&self, index: usize) -> Option<(&RuntimeResourceID, &ResourceReferenceFlags)>{
+    pub fn get_reference(&self, index: usize) -> Option<&(RuntimeResourceID, ResourceReferenceFlags)>{
         self.header.references.iter().nth(index)
     }
 
-    pub fn get_all_references(&self) -> &HashMap<RuntimeResourceID, ResourceReferenceFlags> {
+    pub fn get_all_references(&self) -> &Vec<(RuntimeResourceID, ResourceReferenceFlags)> {
         &self.header.references
     }
 
