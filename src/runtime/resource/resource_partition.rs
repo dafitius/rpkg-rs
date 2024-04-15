@@ -87,6 +87,7 @@ impl ResourcePartition {
     /// search through the package_dir to figure out which patch indices are there.
     /// We have to use this inside of using the patchlevel inside the PartitionInfo.
     fn get_patch_indices(&self, package_dir: &PathBuf) -> Result<Vec<PatchId>, ResourcePartitionError> {
+        //TODO: Stop using paths for this. Just filenames should be enough
         let mut patch_indices = vec![];
 
         let filename = self.info.get_filename(&PatchId::Base);
@@ -94,18 +95,16 @@ impl ResourcePartition {
             return Err(ResourcePartitionError::BasePackageNotFound(filename));
         }
 
-        let regex_str = package_dir.join(format!("{}patch([0-9]+).rpkg", self.info.id))
-            .as_os_str().to_str().unwrap_or("")
-            .replace('\\', "/");
+        let regex_str = format!(r"(?:\\|/){}patch([0-9]+).rpkg$", self.info.id);
         let patch_package_re = Regex::new(regex_str.as_str()).unwrap();
         for path_buf in fs::read_dir(package_dir)?
             .filter(|r| r.is_ok())
             .map(|r| r.unwrap().path())
             .filter(|r| r.is_file())
         {
-            let path = path_buf.as_path().to_str().unwrap_or("").replace('\\', "/");
-            if patch_package_re.is_match(path.as_str()) {
-                let cap = patch_package_re.captures(path.as_str()).unwrap();
+            let path = path_buf.as_path().to_str().unwrap_or("");
+            if patch_package_re.is_match(path) {
+                let cap = patch_package_re.captures(path).unwrap();
                 let patch_level = cap[1].parse::<usize>()?;
                 if patch_level <= self.info.patch_level {
                     patch_indices.push(PatchId::Patch(patch_level));
