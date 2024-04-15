@@ -192,8 +192,13 @@ impl PackageOffsetInfo {
     pub fn get_is_scrambled(&self) -> bool
     { self.compressed_size_and_is_scrambled_flag & 0x80000000 == 0x80000000 }
 
-    pub fn get_compressed_size(&self) -> usize
-    { (self.compressed_size_and_is_scrambled_flag & 0x7FFFFFFF) as usize }
+    pub fn get_compressed_size(&self) -> Option<usize>
+    {
+        match (self.compressed_size_and_is_scrambled_flag & 0x7FFFFFFF) as usize {
+            0 => { None }
+            n => { Some(n) }
+        }
+    }
 }
 
 #[allow(dead_code)]
@@ -207,7 +212,7 @@ pub struct ResourceHeader
     pub system_memory_requirement: u32,
     pub video_memory_requirement: u32,
 
-    #[br(if (references_chunk_size > 0), parse_with=read_references)]
+    #[br(if (references_chunk_size > 0), parse_with = read_references)]
     pub references: Vec<(RuntimeResourceID, ResourceReferenceFlags)>,
 }
 
@@ -237,24 +242,24 @@ pub enum ReferenceType
 #[parser(reader)]
 fn read_references() -> BinResult<Vec<(RuntimeResourceID, ResourceReferenceFlags)>> {
     let reference_count_and_flag = u32::read_le(reader)?;
-    let reference_count = reference_count_and_flag  & 0x3FFFFFFF;
+    let reference_count = reference_count_and_flag & 0x3FFFFFFF;
 
     let arrays = if reference_count_and_flag & 0x40000000 == 0x40000000 {
-        let flags : Vec<ResourceReferenceFlags> = (0..reference_count).map(|_| -> BinResult<ResourceReferenceFlags>{
+        let flags: Vec<ResourceReferenceFlags> = (0..reference_count).map(|_| -> BinResult<ResourceReferenceFlags>{
             ResourceReferenceFlags::read_le(reader)
         }).collect::<BinResult<Vec<_>>>()?;
-        let rrids : Vec<RuntimeResourceID> = (0..reference_count).map(|_| -> BinResult<RuntimeResourceID>{
+        let rrids: Vec<RuntimeResourceID> = (0..reference_count).map(|_| -> BinResult<RuntimeResourceID>{
             RuntimeResourceID::read_le(reader)
         }).collect::<BinResult<Vec<_>>>()?;
 
 
         (rrids, flags)
-    }else{
-        let rrids : Vec<RuntimeResourceID> = (0..reference_count).map(|_| -> BinResult<RuntimeResourceID> {
+    } else {
+        let rrids: Vec<RuntimeResourceID> = (0..reference_count).map(|_| -> BinResult<RuntimeResourceID> {
             RuntimeResourceID::read_le(reader)
         }).collect::<BinResult<Vec<_>>>()?;
 
-        let flags : Vec<ResourceReferenceFlags> = (0..reference_count).map(|_| -> BinResult<ResourceReferenceFlags>{
+        let flags: Vec<ResourceReferenceFlags> = (0..reference_count).map(|_| -> BinResult<ResourceReferenceFlags>{
             ResourceReferenceFlags::read_le(reader)
         }).collect::<BinResult<Vec<_>>>()?;
 
