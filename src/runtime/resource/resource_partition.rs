@@ -1,11 +1,11 @@
 use regex::Regex;
 use std::{fmt, io};
-use std::{collections::HashMap, fs, path::Path};
+use std::{collections::HashMap, path::Path};
 use std::cmp::Ordering;
 use std::fmt::Debug;
 use std::path::PathBuf;
 use thiserror::Error;
-use crate::{GlacierResource, GlacierResourceError, WoaVersion};
+use crate::{GlacierResource, GlacierResourceError, utils, WoaVersion};
 use crate::runtime::resource::package_defs::PartitionInfo;
 use crate::runtime::resource::partition_manager::PartitionState;
 use crate::runtime::resource::resource_info::ResourceInfo;
@@ -39,14 +39,14 @@ pub enum ResourcePartitionError {
     ResourceNotAvailable,
 
     #[error("Interal resource error: {0}")]
-    ResourceError(#[from] GlacierResourceError)
+    ResourceError(#[from] GlacierResourceError),
 }
 
 #[derive(Clone, Copy, Debug)]
 #[derive(Eq, Hash, PartialEq)]
-pub enum PatchId{
+pub enum PatchId {
     Base,
-    Patch(usize)
+    Patch(usize),
 }
 
 impl Ord for PatchId {
@@ -86,8 +86,7 @@ impl ResourcePartition {
 
     /// search through the package_dir to figure out which patch indices are there.
     /// We have to use this inside of using the patchlevel inside the PartitionInfo.
-    fn get_patch_indices(&self, package_dir: &PathBuf) -> Result<Vec<PatchId>, ResourcePartitionError> {
-        //TODO: Stop using paths for this. Just filenames should be enough
+    fn get_patch_indices(&self, package_dir: &Path) -> Result<Vec<PatchId>, ResourcePartitionError> {
         let mut patch_indices = vec![];
 
         let filename = self.info.get_filename(&PatchId::Base);
@@ -95,32 +94,28 @@ impl ResourcePartition {
             return Err(ResourcePartitionError::BasePackageNotFound(filename));
         }
 
-        let regex_str = format!(r"(?:\\|/){}patch([0-9]+).rpkg$", self.info.id);
+        let regex_str = format!(r"^(?:{}patch([0-9]+).rpkg)$", self.info.id);
         let patch_package_re = Regex::new(regex_str.as_str()).unwrap();
-        for path_buf in fs::read_dir(package_dir)?
-            .filter(|r| r.is_ok())
-            .map(|r| r.unwrap().path())
-            .filter(|r| r.is_file())
-        {
-            let path = path_buf.as_path().to_str().unwrap_or("");
-            if patch_package_re.is_match(path) {
-                let cap = patch_package_re.captures(path).unwrap();
+
+        for file_name in utils::get_file_names(package_dir).iter().flat_map(|file_name| file_name.to_str()){
+            if let Some(cap) = patch_package_re.captures(file_name) {
                 let patch_level = cap[1].parse::<usize>()?;
                 if patch_level <= self.info.patch_level {
                     patch_indices.push(PatchId::Patch(patch_level));
                 }
             }
         }
+
         patch_indices.sort();
         Ok(patch_indices)
     }
 
-    pub fn mount_resource_packages_in_partition(&mut self, runtime_path: &PathBuf,
-    ) -> Result<(), ResourcePartitionError>{
-        self.mount_resource_packages_in_partition_with_hook(runtime_path, |_|{})
+    pub fn mount_resource_packages_in_partition(&mut self, runtime_path: &Path,
+    ) -> Result<(), ResourcePartitionError> {
+        self.mount_resource_packages_in_partition_with_hook(runtime_path, |_| {})
     }
 
-    pub fn mount_resource_packages_in_partition_with_hook<F>(&mut self, runtime_path: &PathBuf, mut progress_callback: F,
+    pub fn mount_resource_packages_in_partition_with_hook<F>(&mut self, runtime_path: &Path, mut progress_callback: F,
     ) -> Result<(), ResourcePartitionError>
         where
             F: FnMut(&PartitionState), {
@@ -133,7 +128,6 @@ impl ResourcePartition {
         //maybe don't error on a missing partition? the game doesn't...
         //let patch_indices = self.get_patch_indices(runtime_path)?;
         let patch_idx_result = self.get_patch_indices(runtime_path);
-
         if patch_idx_result.is_err() {
             state.installing = false;
             return Ok(());
@@ -158,7 +152,7 @@ impl ResourcePartition {
         state.mounted = true;
         progress_callback(&state);
 
-        self.mount_location = Some(runtime_path.clone());
+        self.mount_location = Some(runtime_path.to_path_buf());
 
         Ok(())
     }
@@ -186,15 +180,15 @@ impl ResourcePartition {
     }
 
     #[allow(dead_code)]
-    pub(crate) fn get_num_patches(&self) -> usize{
+    pub(crate) fn get_num_patches(&self) -> usize {
         self.packages.len().saturating_sub(1)
     }
 
     pub fn get_latest_resources(&self) -> Vec<(&ResourceInfo, &PatchId)> {
         self.resources.iter().flat_map(|(rrid, idx)| {
-            if let Ok(info) = self.get_resource_info_from(rrid, idx){
+            if let Ok(info) = self.get_resource_info_from(rrid, idx) {
                 Some((info, idx))
-            }else {None}
+            } else { None }
         }).collect()
     }
 
