@@ -5,11 +5,13 @@ use std::io::{Cursor, Read, Seek};
 use std::iter::zip;
 use std::path::{Path};
 use binrw::{BinRead, BinReaderExt, BinResult, parser};
+use itertools::Itertools;
 use lz4::block::decompress_to_buffer;
 use memmap2::Mmap;
 use modular_bitfield::prelude::*;
 use thiserror::Error;
 use crate::runtime::resource::resource_info::ResourceInfo;
+use crate::runtime::resource::resource_package::ReferenceType::{INSTALL, NORMAL, WEAK};
 
 use crate::runtime::resource::runtime_resource_id::RuntimeResourceID;
 
@@ -229,6 +231,16 @@ pub struct ResourceReferenceFlags
     pub reference_type: ReferenceType,
 }
 
+impl ResourceReferenceFlags {
+    pub fn from_type(reference_type: ReferenceType, acquired: bool) -> Self {
+        ResourceReferenceFlags {
+            bytes: [
+                0x1f | ((acquired as u8) << 0x5) | ((reference_type as u8) << 0x6)
+            ]
+        }
+    }
+}
+
 #[allow(dead_code)]
 #[derive(BitfieldSpecifier)]
 #[derive(Debug)]
@@ -240,30 +252,29 @@ pub enum ReferenceType
     WEAK = 2,
 }
 
+
+fn convert_old_flags_to_new_type(old_flags: u8) -> ResourceReferenceFlags {
+    ResourceReferenceFlags::from_type(
+        match old_flags {
+            _ if (old_flags & 0x44) != 0 => { WEAK }
+            _ if !old_flags >> 7 == 1 => { INSTALL }
+            _ => { NORMAL }
+        }, (old_flags & 2) == 2)
+}
+
 #[parser(reader)]
 fn read_references() -> BinResult<Vec<(RuntimeResourceID, ResourceReferenceFlags)>> {
     let reference_count_and_flag = u32::read_le(reader)?;
     let reference_count = reference_count_and_flag & 0x3FFFFFFF;
+    let is_new_format = reference_count_and_flag & 0x40000000 == 0x40000000;
 
-    let arrays = if reference_count_and_flag & 0x40000000 == 0x40000000 {
-        let flags: Vec<ResourceReferenceFlags> = (0..reference_count).map(|_| -> BinResult<ResourceReferenceFlags>{
-            ResourceReferenceFlags::read_le(reader)
-        }).collect::<BinResult<Vec<_>>>()?;
-        let rrids: Vec<RuntimeResourceID> = (0..reference_count).map(|_| -> BinResult<RuntimeResourceID>{
-            RuntimeResourceID::read_le(reader)
-        }).collect::<BinResult<Vec<_>>>()?;
-
-
+    let arrays = if is_new_format {
+        let flags: Vec<ResourceReferenceFlags> = (0..reference_count).map(|_| ResourceReferenceFlags::read_le(reader)).collect::<BinResult<Vec<_>>>()?;
+        let rrids: Vec<RuntimeResourceID> = (0..reference_count).map(|_| RuntimeResourceID::read_le(reader)).collect::<BinResult<Vec<_>>>()?;
         (rrids, flags)
     } else {
-        let rrids: Vec<RuntimeResourceID> = (0..reference_count).map(|_| -> BinResult<RuntimeResourceID> {
-            RuntimeResourceID::read_le(reader)
-        }).collect::<BinResult<Vec<_>>>()?;
-
-        let flags: Vec<ResourceReferenceFlags> = (0..reference_count).map(|_| -> BinResult<ResourceReferenceFlags>{
-            ResourceReferenceFlags::read_le(reader)
-        }).collect::<BinResult<Vec<_>>>()?;
-
+        let rrids: Vec<RuntimeResourceID> = (0..reference_count).map(|_| RuntimeResourceID::read_le(reader)).collect::<BinResult<Vec<_>>>()?;
+        let flags: Vec<ResourceReferenceFlags> = (0..reference_count).map(|_| u8::read_le(reader)).map_ok(convert_old_flags_to_new_type).collect::<BinResult<Vec<_>>>()?;
         (rrids, flags)
     };
 
