@@ -95,14 +95,30 @@ impl PartitionManager {
         Ok(partition)
     }
 
-    pub fn get_all_partitions(&self) -> Vec<&ResourcePartition>{
+    pub fn get_all_partitions(&self) -> Vec<&ResourcePartition> {
         self.partitions.iter().collect::<Vec<&ResourcePartition>>()
     }
 
-    pub fn get_resource_info_from(&self, partition_id: PartitionId, rrid: RuntimeResourceID) -> Result<&ResourceInfo, PackageManagerError> {
-        let partition = self.partitions.iter().find(|partition| partition.get_partition_info().id == partition_id);
+    pub fn get_partitions_with_resource(&self, rrid: &RuntimeResourceID) -> Vec<&PartitionId>{
+        self.partitions.iter().filter_map(|partition| {
+            if partition.contains(rrid){
+                Some(&partition.get_partition_info().id)
+            } else {None}
+        }).collect()
+    }
+
+    pub fn get_resource_infos(&self, rrid: &RuntimeResourceID) -> Vec<(&PartitionId, &ResourceInfo)> {
+        self.get_partitions_with_resource(rrid).into_iter().filter_map(|p_id|{
+            if let Ok(info) = self.get_resource_info_from(p_id, rrid){
+                Some((p_id, info))
+            } else {None}
+        }).collect()
+    }
+
+    pub fn get_resource_info_from(&self, partition_id: &PartitionId, rrid: &RuntimeResourceID) -> Result<&ResourceInfo, PackageManagerError> {
+        let partition = self.partitions.iter().find(|partition| partition.get_partition_info().id == *partition_id);
         if let Some(partition) = partition {
-            match partition.get_resource_info(&rrid) {
+            match partition.get_resource_info(rrid) {
                 Ok(info) => { Ok(info) }
                 Err(e) => { Err(PackageManagerError::PartitionError(e)) }
             }
@@ -114,18 +130,17 @@ impl PartitionManager {
     pub fn print_resource_changelog(&self, rrid: &RuntimeResourceID) {
         println!("Resource: {rrid}");
 
-        for partition in self.partitions.iter() {
+        for partition in self.get_all_partitions() {
             let mut last_occurence: Option<&ResourceInfo> = None;
 
             let get_size = |info: &ResourceInfo| {
-                 info.get_compressed_size().unwrap_or(info.header.data_size as usize)
+                info.get_compressed_size().unwrap_or(info.header.data_size as usize)
             };
 
             let changes = partition.get_resource_patch_indices(rrid);
             let deletions = partition.get_resource_removal_indices(rrid);
             let occurrences = changes.clone().into_iter().chain(deletions.clone().into_iter()).collect::<Vec<&PatchId>>();
             for occurence in occurrences.iter().sorted() {
-
                 println!("{}: {}", match occurence {
                     PatchId::Base => { "Base" }
                     PatchId::Patch(_) => { "Patch" }

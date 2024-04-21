@@ -41,6 +41,18 @@ impl From<u64> for RuntimeResourceID {
     }
 }
 
+impl From<ResourceID> for RuntimeResourceID {
+    fn from(value: ResourceID) -> Self {
+        Self::from_resource_id(&value)
+    }
+}
+
+impl From<&str> for RuntimeResourceID {
+    fn from(_: &str) -> Self {
+        unimplemented!("Implicit conversion from &str to RuntimeResourceID is not allowed, use the from_raw_string function, or convert from a ResourceID.");
+    }
+}
+
 impl RuntimeResourceID {
     pub fn to_hex_string(&self) -> String {
         format!("{:016X}", self.id)
@@ -54,6 +66,20 @@ impl RuntimeResourceID {
     pub fn from_resource_id(rid: &ResourceID) -> Self {
 
         let digest = Md5::digest(rid.get_resource_path());
+        let mut hash = 0u64;
+        for i in 1..8 {
+            hash |= u64::from(digest[i]) << (8 * (7 - i));
+        }
+
+        Self {
+            id: hash,
+        }
+    }
+
+    ///prefer [from_resource_id] when possible
+    pub fn from_raw_string(string: &str) -> Self {
+
+        let digest = Md5::digest(string);
         let mut hash = 0u64;
         for i in 1..8 {
             hash |= u64::from(digest[i]) << (8 * (7 - i));
@@ -98,4 +124,27 @@ impl fmt::Display for RuntimeResourceID {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.to_hex_string())
     }
+}
+
+
+// Test section
+#[cfg(test)]
+mod tests {
+    // Import the test module
+    use super::*;
+
+    #[test]
+    fn test_rrid_conversions() {
+        assert_eq!(RuntimeResourceID::from(0x00123456789ABCDE), 0x00123456789ABCDE);
+        assert_eq!(RuntimeResourceID::invalid(), 0x00FFFFFFFFFFFFFF);
+        assert_eq!(RuntimeResourceID::from_raw_string("hello world"), 0x00B63BBBE01EEED0);
+        assert_eq!(RuntimeResourceID::from_hex_string("0x00123456789ABCDE").unwrap(), 0x00123456789ABCDE);
+        assert_eq!(RuntimeResourceID::from_hex_string("00123456789ABCDE").unwrap(), 0x00123456789ABCDE);
+
+        let rid = ResourceID::from_string("[assembly:/_test/lib.a?/test_image.png].pc_webp").unwrap();
+        assert_eq!(RuntimeResourceID::from_resource_id(&rid), 0x00290D5B143172A3);
+        assert_eq!(RuntimeResourceID::from(rid), 0x00290D5B143172A3);
+    }
+
+    // Add more test functions as needed
 }

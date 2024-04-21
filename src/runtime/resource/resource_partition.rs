@@ -181,8 +181,7 @@ impl ResourcePartition {
         Ok(())
     }
 
-    #[allow(dead_code)]
-    fn is_resource_mounted(&self, rrid: &RuntimeResourceID) -> bool {
+    pub fn contains(&self, rrid: &RuntimeResourceID) -> bool {
         self.resources.contains_key(rrid)
     }
 
