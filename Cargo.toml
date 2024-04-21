@@ -1,6 +1,6 @@
 [package]
 name = "rpkg-rs"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2021"
 license = "Apache-2.0"
 description = "Parse Glacier ResourcePackage (rpkg) files, allowing access to the resources stored within."
@@ -17,7 +17,7 @@ lz4 = "1.24.0"
 pathdiff = "0.2.1"
 
 itertools = { version = "0.12.1", features = [] }
-thiserror = "1.0.58"
+thiserror = "1.0.59"
 md-5 = "0.10.6"
 extended-tea = "0.1.1"
 byteorder = "1.5.0"
