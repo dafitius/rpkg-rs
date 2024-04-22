@@ -2,6 +2,11 @@
   <h1><code>rpkg-rs</code></h1>
 </div>
 
+![Maintenance](https://img.shields.io/badge/maintenance-actively--developed-brightgreen.svg)
+[![CI](https://github.com/dafitius/rpkg-rs/actions/workflows/rust.yml/badge.svg)](https://github.com/dafitius/rpkg-rs/actions)
+[![crates-io](https://img.shields.io/crates/v/rpkg-rs.svg)](https://crates.io/crates/rpkg-rs)
+[![api-docs](https://docs.rs/rpkg-rs/badge.svg)](https://docs.rs/rpkg-rs)
+
 `rpkg-rs` provides functionality for interacting with `ResourcePackage` (rpkg) files found within Hitman games. 
 This crate facilitates parsing of these files, enabling seamless access to the contained resource files. By parsing configuration files such as `thumbs.ini` and `packagedefintion.txt`, `rpkg-rs` offers extensive support for reading and manipulating these packages.
 
