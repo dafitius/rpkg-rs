@@ -67,7 +67,7 @@ impl RuntimeResourceID {
 
     /// Create RuntimeResourceID from ResourceID
     pub fn from_resource_id(rid: &ResourceID) -> Self {
-        let digest = Md5::digest(rid.get_resource_path());
+        let digest = Md5::digest(rid.resource_path());
         let mut hash = 0u64;
         for i in 1..8 {
             hash |= u64::from(digest[i]) << (8 * (7 - i));

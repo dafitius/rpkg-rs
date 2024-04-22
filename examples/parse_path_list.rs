@@ -31,7 +31,7 @@ fn main() {
             .expect("Failed to read line");
 
         if let Ok(rrid) = RuntimeResourceID::from_hex_string(input_string.as_str().trim_end()) {
-            println!("{:?}", path_list.get_resource_id(&rrid));
+            println!("{:?}", path_list.get(&rrid));
         } else {
             println!("Failed to interpret the input")
         }

@@ -23,11 +23,11 @@ fn main() {
         std::process::exit(1);
     });
 
-    let app_options = &thumbs.get_root()["application"];
+    let app_options = &thumbs.root()["application"];
 
     if let (Some(proj_path), Some(relative_runtime_path)) = (
-        app_options.get_option("PROJECT_PATH"),
-        app_options.get_option("RUNTIME_PATH"),
+        app_options.get("PROJECT_PATH"),
+        app_options.get("RUNTIME_PATH"),
     ) {
         let runtime_path = PathBuf::from(format!(
             "{}\\{proj_path}\\{relative_runtime_path}",

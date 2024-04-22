@@ -73,9 +73,9 @@ pub struct IniFile {
 ///
 ///  let thumbs = IniFileSystem::from(&thumbs_path.as_path())?;
 ///
-///  let app_options = &thumbs.get_root()?;
+///  let app_options = &thumbs.root()?;
 ///
-///  if let (Some(proj_path), Some(runtime_path)) = (app_options.get_option("PROJECT_PATH"), app_options.get_option("RUNTIME_PATH")) {
+///  if let (Some(proj_path), Some(runtime_path)) = (app_options.get("PROJECT_PATH"), app_options.get("RUNTIME_PATH")) {
 ///     println!("Project path: {}", proj_path);
 ///     println!("Runtime path: {}", runtime_path);
 ///  }
@@ -98,18 +98,18 @@ impl IniFileSection {
         }
     }
 
-    pub fn get_name(&self) -> String {
+    pub fn name(&self) -> String {
         self.name.to_owned()
     }
 
-    pub fn get_option(&self, option_name: &str) -> Option<&String> {
+    pub fn get(&self, option_name: &str) -> Option<&String> {
         self.options.get(option_name)
     }
     pub fn has_option(&self, option_name: &str) -> bool {
         self.options.get(option_name).is_some()
     }
 
-    pub fn get_options(&self) -> Vec<&String> {
+    pub fn options(&self) -> Vec<&String> {
         self.options.keys().collect()
     }
 
@@ -155,21 +155,21 @@ impl IniFile {
             console_cmds: vec![],
         }
     }
-    pub fn get_name(&self) -> String {
+    pub fn name(&self) -> String {
         self.name.to_string()
     }
-    pub fn get_all_sections(&self) -> Vec<&IniFileSection> {
+    pub fn sections(&self) -> Vec<&IniFileSection> {
         self.sections.values().collect()
     }
-    pub fn get_section(&self, name: &str) -> Option<&IniFileSection> {
+    pub fn section(&self, name: &str) -> Option<&IniFileSection> {
         self.sections.get(name)
     }
 
-    pub fn get_include(&self, include_name: &str) -> Option<&IniFile> {
+    pub fn included_file(&self, include_name: &str) -> Option<&IniFile> {
         self.includes.iter().find(|incl| incl.name == include_name)
     }
 
-    pub fn get_value(&self, section_name: &str, option_name: &str) -> Result<String, IniFileError> {
+    pub fn option(&self, section_name: &str, option_name: &str) -> Result<String, IniFileError> {
         match self.sections.get(section_name) {
             Some(v) => match v.options.get(option_name.to_uppercase().as_str()) {
                 Some(o) => Ok(o.clone()),
@@ -201,7 +201,7 @@ impl IniFile {
         self.console_cmds.push(command);
     }
 
-    pub fn get_console_cmds(&self) -> &Vec<String> {
+    pub fn console_cmds(&self) -> &Vec<String> {
         &self.console_cmds
     }
 
@@ -218,7 +218,7 @@ impl IniFile {
             .keys()
             .sorted_by(|a, b| Ord::cmp(&a.to_lowercase(), &b.to_lowercase()))
         {
-            if let Some(section) = self.get_section(section_name) {
+            if let Some(section) = self.section(section_name) {
                 section.write_section(writer);
             }
         }
@@ -394,7 +394,7 @@ impl IniFileSystem {
     }
 
     /// Retrieves all console commands from the IniFileSystem, including those from included files.
-    pub fn get_console_cmds(&self) -> Vec<String> {
+    pub fn console_cmds(&self) -> Vec<String> {
         let mut cmds: Vec<String> = vec![];
 
         // Helper function to traverse the includes recursively
@@ -412,13 +412,13 @@ impl IniFileSystem {
     }
 
     /// Retrieves the value of an option in a section from the IniFileSystem, including values from included files.
-    pub fn get_value(&self, section_name: &str, option_name: &str) -> Result<String, IniFileError> {
+    pub fn option(&self, section_name: &str, option_name: &str) -> Result<String, IniFileError> {
         let mut queue: VecDeque<&IniFile> = VecDeque::new();
         queue.push_back(&self.root);
         let mut latest_value: Option<String> = None;
 
         while let Some(current_file) = queue.pop_front() {
-            if let Ok(value) = current_file.get_value(section_name, option_name) {
+            if let Ok(value) = current_file.option(section_name, option_name) {
                 // Update the latest value found
                 latest_value = Some(value.clone());
             }
@@ -432,7 +432,7 @@ impl IniFileSystem {
     }
 
     /// Retrieves a reference to the root IniFile of the IniFileSystem.
-    pub fn get_root(&self) -> &IniFile {
+    pub fn root(&self) -> &IniFile {
         &self.root
     }
 }

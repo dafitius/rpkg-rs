@@ -48,8 +48,8 @@ pub trait GlacierResource: Sized {
         woa_version: WoaVersion,
     ) -> Result<Vec<u8>, GlacierResourceError>;
 
-    fn get_video_memory_requirement(_: &Self::Output) -> u64;
-    fn get_system_memory_requirement(_: &Self::Output) -> u64;
+    fn video_memory_requirement(_: &Self::Output) -> u64;
+    fn system_memory_requirement(_: &Self::Output) -> u64;
 }
 
 impl<I> GlacierResource for I
@@ -70,11 +70,11 @@ where
         Ok(resource.clone())
     }
 
-    fn get_video_memory_requirement(_: &Self::Output) -> u64 {
+    fn video_memory_requirement(_: &Self::Output) -> u64 {
         u64::MAX
     }
 
-    fn get_system_memory_requirement(_: &Self::Output) -> u64 {
+    fn system_memory_requirement(_: &Self::Output) -> u64 {
         u64::MAX
     }
 }

@@ -79,7 +79,7 @@ impl PathList {
         Ok(self)
     }
 
-    pub fn get_resource_id(&self, key: &RuntimeResourceID) -> Option<&ResourceID> {
+    pub fn get(&self, key: &RuntimeResourceID) -> Option<&ResourceID> {
         if let Some(value) = self.entries.get(key) {
             if let Some(path) = value {
                 return Some(path);

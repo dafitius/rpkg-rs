@@ -38,7 +38,7 @@ impl PackageDefinitionParser for HM2Parser {
                         };
 
                         partitions.push(PartitionInfo {
-                            name: try_get_partition_name(previous_lines.to_vec()),
+                            name: try_read_partition_name(previous_lines.to_vec()),
                             parent: partitions.iter().map(|p| p.id.clone()).next(),
                             id: PartitionId {
                                 part_type: part_type.clone(),
@@ -74,7 +74,7 @@ impl PackageDefinitionParser for HM2Parser {
     }
 }
 
-fn try_get_partition_name(lines: Vec<&str>) -> Option<String> {
+fn try_read_partition_name(lines: Vec<&str>) -> Option<String> {
     let reg = Regex::new(r"\/\/ --- (?:DLC|Chunk) \d{2,2} (.*)").unwrap();
     for line in lines {
         if reg.is_match(line) {

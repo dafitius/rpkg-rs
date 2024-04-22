@@ -28,7 +28,7 @@ fn main() {
     });
 
     println!("Extracting the resource");
-    let file = rpkg.get_resource(&package_path, &rrid).unwrap_or_else(|e| {
+    let file = rpkg.read_resource(&package_path, &rrid).unwrap_or_else(|e| {
         println!("Failed extract resource: {}", e);
         std::process::exit(0)
     });

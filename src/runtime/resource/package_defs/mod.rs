@@ -165,7 +165,7 @@ impl PartitionInfo {
         })
     }
 
-    pub fn get_filename(&self, patch_index: &PatchId) -> String {
+    pub fn filename(&self, patch_index: &PatchId) -> String {
         match patch_index {
             PatchId::Base => {
                 let base = self.id.to_string();

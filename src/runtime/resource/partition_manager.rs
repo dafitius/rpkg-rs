@@ -94,7 +94,7 @@ impl PartitionManager {
         Ok(())
     }
 
-    pub fn get_resource_from(
+    pub fn read_resource_from(
         &self,
         partition_id: PartitionId,
         rrid: RuntimeResourceID,
@@ -102,9 +102,9 @@ impl PartitionManager {
         let partition = self
             .partitions
             .iter()
-            .find(|partition| partition.get_partition_info().id == partition_id);
+            .find(|partition| partition.partition_info().id == partition_id);
         if let Some(partition) = partition {
-            match partition.get_resource(&rrid) {
+            match partition.read_resource(&rrid) {
                 Ok(data) => Ok(data),
                 Err(e) => Err(PackageManagerError::PartitionError(e)),
             }
@@ -115,30 +115,30 @@ impl PartitionManager {
         }
     }
 
-    pub fn get_partition(
+    pub fn partition(
         &self,
         partition_id: PartitionId,
     ) -> Result<&ResourcePartition, PackageManagerError> {
         let partition = self
             .partitions
             .iter()
-            .find(|partition| partition.get_partition_info().id == partition_id)
+            .find(|partition| partition.partition_info().id == partition_id)
             .ok_or(PackageManagerError::PartitionNotFound(
                 partition_id.to_string(),
             ))?;
         Ok(partition)
     }
 
-    pub fn get_all_partitions(&self) -> Vec<&ResourcePartition> {
+    pub fn partitions(&self) -> Vec<&ResourcePartition> {
         self.partitions.iter().collect::<Vec<&ResourcePartition>>()
     }
 
-    pub fn get_partitions_with_resource(&self, rrid: &RuntimeResourceID) -> Vec<&PartitionId> {
+    pub fn partitions_with_resource(&self, rrid: &RuntimeResourceID) -> Vec<&PartitionId> {
         self.partitions
             .iter()
             .filter_map(|partition| {
                 if partition.contains(rrid) {
-                    Some(&partition.get_partition_info().id)
+                    Some(&partition.partition_info().id)
                 } else {
                     None
                 }
@@ -146,14 +146,14 @@ impl PartitionManager {
             .collect()
     }
 
-    pub fn get_resource_infos(
+    pub fn resource_infos(
         &self,
         rrid: &RuntimeResourceID,
     ) -> Vec<(&PartitionId, &ResourceInfo)> {
-        self.get_partitions_with_resource(rrid)
+        self.partitions_with_resource(rrid)
             .into_iter()
             .filter_map(|p_id| {
-                if let Ok(info) = self.get_resource_info_from(p_id, rrid) {
+                if let Ok(info) = self.resource_info_from(p_id, rrid) {
                     Some((p_id, info))
                 } else {
                     None
@@ -162,7 +162,7 @@ impl PartitionManager {
             .collect()
     }
 
-    pub fn get_resource_info_from(
+    pub fn resource_info_from(
         &self,
         partition_id: &PartitionId,
         rrid: &RuntimeResourceID,
@@ -170,9 +170,9 @@ impl PartitionManager {
         let partition = self
             .partitions
             .iter()
-            .find(|partition| partition.get_partition_info().id == *partition_id);
+            .find(|partition| partition.partition_info().id == *partition_id);
         if let Some(partition) = partition {
-            match partition.get_resource_info(rrid) {
+            match partition.resource_info(rrid) {
                 Ok(info) => Ok(info),
                 Err(e) => Err(PackageManagerError::PartitionError(e)),
             }
@@ -186,16 +186,16 @@ impl PartitionManager {
     pub fn print_resource_changelog(&self, rrid: &RuntimeResourceID) {
         println!("Resource: {rrid}");
 
-        for partition in self.get_all_partitions() {
+        for partition in self.partitions() {
             let mut last_occurence: Option<&ResourceInfo> = None;
 
-            let get_size = |info: &ResourceInfo| {
-                info.get_compressed_size()
+            let size = |info: &ResourceInfo| {
+                info.compressed_size()
                     .unwrap_or(info.header.data_size as usize)
             };
 
-            let changes = partition.get_resource_patch_indices(rrid);
-            let deletions = partition.get_resource_removal_indices(rrid);
+            let changes = partition.resource_patch_indices(rrid);
+            let deletions = partition.resource_removal_indices(rrid);
             let occurrences = changes
                 .clone()
                 .into_iter()
@@ -212,7 +212,7 @@ impl PartitionManager {
                             "Patch"
                         }
                     },
-                    partition.get_partition_info().get_filename(occurence)
+                    partition.partition_info().filename(occurence)
                 );
 
                 if deletions.contains(occurence) {
@@ -220,17 +220,17 @@ impl PartitionManager {
                     last_occurence = None;
                 }
                 if changes.contains(occurence) {
-                    if let Ok(info) = partition.get_resource_info_from(rrid, occurence) {
+                    if let Ok(info) = partition.resource_info_from(rrid, occurence) {
                         if let Some(last_info) = last_occurence {
                             println!(
                                 "\t- Modification: Size changed from {} to {}",
-                                get_size(last_info),
-                                get_size(info)
+                                size(last_info),
+                                size(info)
                             );
                         } else {
                             println!(
                                 "\t- Addition: New occurrence, Size {} bytes",
-                                get_size(info)
+                                size(info)
                             )
                         }
                         last_occurence = Some(info);

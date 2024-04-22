@@ -28,7 +28,7 @@ fn main() {
     });
 
     let mut partition = ResourcePartition::new(partition_info);
-    print!("Mounting partition {} ", &partition.get_partition_info().id);
+    print!("Mounting partition {} ", &partition.partition_info().id);
 
     partition
         .mount_resource_packages_in_partition(&runtime_path)
@@ -38,7 +38,7 @@ fn main() {
         });
 
     println!("Extracting the resource");
-    let file = partition.get_resource(&rrid).unwrap_or_else(|e| {
+    let file = partition.read_resource(&rrid).unwrap_or_else(|e| {
         println!("Failed extract resource: {:?}", e);
         std::process::exit(0)
     });

@@ -89,7 +89,7 @@ impl ResourcePackage {
             .map_err(ResourcePackageError::ParsingError)
     }
 
-    pub fn get_magic(&self) -> String {
+    pub fn magic(&self) -> String {
         String::from_utf8_lossy(&self.magic)
             .into_owned()
             .chars()
@@ -97,15 +97,15 @@ impl ResourcePackage {
             .collect()
     }
 
-    pub fn get_metadata(&self) -> &Option<PackageMetadata> {
+    pub fn metadata(&self) -> &Option<PackageMetadata> {
         &self.metadata
     }
 
-    pub fn get_header(&self) -> &PackageHeader {
+    pub fn header(&self) -> &PackageHeader {
         &self.header
     }
 
-    pub fn get_unneeded_resources(&self) -> Vec<RuntimeResourceID> {
+    pub fn unneeded_resources(&self) -> Vec<RuntimeResourceID> {
         match &self.unneeded_resources {
             None => {
                 vec![]
@@ -114,7 +114,7 @@ impl ResourcePackage {
         }
     }
 
-    pub fn get_resource_info(&self, rrid: &RuntimeResourceID) -> Option<&ResourceInfo> {
+    pub fn resource_info(&self, rrid: &RuntimeResourceID) -> Option<&ResourceInfo> {
         self.resources.get(rrid)
     }
 
@@ -130,7 +130,7 @@ impl ResourcePackage {
         }
     }
 
-    pub fn get_resource(
+    pub fn read_resource(
         &self,
         package_path: &Path,
         rrid: &RuntimeResourceID,
@@ -140,11 +140,11 @@ impl ResourcePackage {
             .get(rrid)
             .ok_or(ResourcePackageError::ResourceNotFound)?;
         let final_size = resource
-            .get_compressed_size()
+            .compressed_size()
             .unwrap_or(resource.header.data_size as usize);
 
-        let is_lz4ed = resource.get_is_compressed();
-        let is_scrambled = resource.get_is_scrambled();
+        let is_lz4ed = resource.is_compressed();
+        let is_scrambled = resource.is_scrambled();
 
         // Extract the resource bytes from the resourcePackage
         let mut file = File::open(package_path).map_err(ResourcePackageError::IoError)?;
@@ -176,11 +176,11 @@ impl ResourcePackage {
         Ok(buffer)
     }
 
-    pub fn get_resource_ids(&self) -> &HashMap<RuntimeResourceID, ResourceInfo> {
+    pub fn resource_ids(&self) -> &HashMap<RuntimeResourceID, ResourceInfo> {
         &self.resources
     }
 
-    pub fn get_unneeded_resource_ids(&self) -> Vec<&RuntimeResourceID> {
+    pub fn unneeded_resource_ids(&self) -> Vec<&RuntimeResourceID> {
         match &self.unneeded_resources {
             None => {
                 vec![]
@@ -217,11 +217,11 @@ pub struct PackageOffsetInfo {
 }
 
 impl PackageOffsetInfo {
-    pub fn get_is_scrambled(&self) -> bool {
+    pub fn is_scrambled(&self) -> bool {
         self.compressed_size_and_is_scrambled_flag & 0x80000000 == 0x80000000
     }
 
-    pub fn get_compressed_size(&self) -> Option<usize> {
+    pub fn compressed_size(&self) -> Option<usize> {
         match (self.compressed_size_and_is_scrambled_flag & 0x7FFFFFFF) as usize {
             0 => None,
             n => Some(n),
@@ -249,10 +249,10 @@ pub enum ResourceReferenceFlags {
 }
 
 impl ResourceReferenceFlags {
-    pub fn get_language_code(&self) -> u8 {
+    pub fn language_code(&self) -> u8 {
         match self {
             ResourceReferenceFlags::Legacy(b) => {
-                convert_old_flags_to_new_type(b).get_language_code()
+                convert_old_flags_to_new_type(b).language_code()
             }
             ResourceReferenceFlags::Standard(b) => b & 0b0001_1111,
         }
@@ -265,9 +265,9 @@ impl ResourceReferenceFlags {
         }
     }
 
-    pub fn get_type(&self) -> ReferenceType {
+    pub fn reference_type(&self) -> ReferenceType {
         match self {
-            ResourceReferenceFlags::Legacy(b) => convert_old_flags_to_new_type(b).get_type(),
+            ResourceReferenceFlags::Legacy(b) => convert_old_flags_to_new_type(b).reference_type(),
             ResourceReferenceFlags::Standard(b) => match b & 0b1100_0000 {
                 0 => INSTALL,
                 1 => NORMAL,
