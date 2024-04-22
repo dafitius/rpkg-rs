@@ -219,25 +219,41 @@ pub struct ResourceHeader
     pub references: Vec<(RuntimeResourceID, ResourceReferenceFlags)>,
 }
 
-#[allow(dead_code)]
-#[bitfield]
-#[derive(BinRead, Clone)]
-#[br(map = Self::from_bytes)]
-pub struct ResourceReferenceFlags
-{
-    pub language_code: B5,
-    pub acquired: bool,
-    #[bits = 2]
-    pub reference_type: ReferenceType,
+pub enum ResourceReferenceFlags {
+    Legacy(u8),
+    Standard(u8)
 }
 
 impl ResourceReferenceFlags {
-    pub fn from_type(reference_type: ReferenceType, acquired: bool) -> Self {
-        ResourceReferenceFlags {
-            bytes: [
-                0x1f | ((acquired as u8) << 0x5) | ((reference_type as u8) << 0x6)
-            ]
+
+    pub fn get_language_code(&self) -> u8 {
+        match self {
+            ResourceReferenceFlags::Legacy(b) => {convert_old_flags_to_new_type(b).get_language_code()}
+            ResourceReferenceFlags::Standard(b) => {b & 0b0001_1111}
         }
+    }
+
+    pub fn is_acquired(&self) -> bool {
+        match self {
+            ResourceReferenceFlags::Legacy(b) => {convert_old_flags_to_new_type(b).is_acquired()}
+            ResourceReferenceFlags::Standard(b) => {(b & 0b0010_0000) != 0}
+        }
+    }
+
+    pub fn get_type(&self) -> ReferenceType {
+        match self {
+            ResourceReferenceFlags::Legacy(b) => {convert_old_flags_to_new_type(b).get_type()}
+            ResourceReferenceFlags::Standard(b) => {match b & 0b1100_0000 {
+                0 => {INSTALL},
+                1 => {NORMAL},
+                2 => {WEAK},
+                _ => {NORMAL},
+            }}
+        }
+    }
+
+    pub fn new(reference_type: ReferenceType, acquired: bool) -> Self {
+        ResourceReferenceFlags::Standard(0x1f | ((acquired as u8) << 0x5) | ((reference_type as u8) << 0x6))
     }
 }
 
@@ -253,8 +269,8 @@ pub enum ReferenceType
 }
 
 
-fn convert_old_flags_to_new_type(old_flags: u8) -> ResourceReferenceFlags {
-    ResourceReferenceFlags::from_type(
+fn convert_old_flags_to_new_type(old_flags: &u8) -> ResourceReferenceFlags {
+    ResourceReferenceFlags::new(
         match old_flags {
             _ if (old_flags & 0x44) != 0 => { WEAK }
             _ if !old_flags >> 7 == 1 => { INSTALL }
@@ -269,12 +285,12 @@ fn read_references() -> BinResult<Vec<(RuntimeResourceID, ResourceReferenceFlags
     let is_new_format = reference_count_and_flag & 0x40000000 == 0x40000000;
 
     let arrays = if is_new_format {
-        let flags: Vec<ResourceReferenceFlags> = (0..reference_count).map(|_| ResourceReferenceFlags::read_le(reader)).collect::<BinResult<Vec<_>>>()?;
+        let flags: Vec<ResourceReferenceFlags> = (0..reference_count).map(|_| u8::read_le(reader)).map_ok(ResourceReferenceFlags::Standard).collect::<BinResult<Vec<_>>>()?;
         let rrids: Vec<RuntimeResourceID> = (0..reference_count).map(|_| RuntimeResourceID::read_le(reader)).collect::<BinResult<Vec<_>>>()?;
         (rrids, flags)
     } else {
         let rrids: Vec<RuntimeResourceID> = (0..reference_count).map(|_| RuntimeResourceID::read_le(reader)).collect::<BinResult<Vec<_>>>()?;
-        let flags: Vec<ResourceReferenceFlags> = (0..reference_count).map(|_| u8::read_le(reader)).map_ok(convert_old_flags_to_new_type).collect::<BinResult<Vec<_>>>()?;
+        let flags: Vec<ResourceReferenceFlags> = (0..reference_count).map(|_| u8::read_le(reader)).map_ok(ResourceReferenceFlags::Legacy).collect::<BinResult<Vec<_>>>()?;
         (rrids, flags)
     };
 
