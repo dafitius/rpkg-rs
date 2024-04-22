@@ -1,14 +1,13 @@
+use rpkg_rs::misc::resource_id::ResourceID;
+use rpkg_rs::runtime::resource::resource_package::ResourcePackage;
+use rpkg_rs::runtime::resource::runtime_resource_id::RuntimeResourceID;
 use std::env;
 use std::path::PathBuf;
-use rpkg_rs::misc::resource_id::ResourceID;
-use rpkg_rs::runtime::resource::resource_package::{ResourcePackage};
-use rpkg_rs::runtime::resource::runtime_resource_id::RuntimeResourceID;
 
 fn main() {
-
     let args: Vec<String> = env::args().collect();
 
-    if args.len() < 3{
+    if args.len() < 3 {
         eprintln!("Usage: cargo run --example <example_name> -- <path to a package> <ResourceId to extract>");
         return;
     }
@@ -23,7 +22,7 @@ fn main() {
     let rrid: RuntimeResourceID = RuntimeResourceID::from_resource_id(&rid);
 
     println!("Parsing the resource package at {}", package_path.display());
-    let rpkg = ResourcePackage::from_file(&package_path).unwrap_or_else(|e|{
+    let rpkg = ResourcePackage::from_file(&package_path).unwrap_or_else(|e| {
         println!("Failed parse resource package: {}", e);
         std::process::exit(0)
     });
@@ -40,7 +39,10 @@ fn main() {
             println!("{}...", s.chars().take(100).collect::<String>())
         }
         Err(_) => {
-            println!("first bytes: {:?}", file.iter().take(50).collect::<Vec<_>>());
+            println!(
+                "first bytes: {:?}",
+                file.iter().take(50).collect::<Vec<_>>()
+            );
         }
     };
 }

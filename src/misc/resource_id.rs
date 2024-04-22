@@ -9,21 +9,20 @@
 //! [[assembly:/images/sprites/player.jpg](asspritesheet).pc_jpeg].pc_png
 //! ```
 
+use crate::runtime::resource::runtime_resource_id::RuntimeResourceID;
 use regex::Regex;
 use thiserror::Error;
-use crate::runtime::resource::runtime_resource_id::RuntimeResourceID;
 
 static CONSOLE_TAG: &str = "pc";
 
 #[derive(Error, Debug)]
 pub enum ResourceIDError {
     #[error("Invalid format {}", _0)]
-    InvalidFormat(String)
+    InvalidFormat(String),
 }
 
 #[derive(Clone, Debug)]
-pub struct ResourceID
-{
+pub struct ResourceID {
     uri: String,
 }
 
@@ -39,7 +38,9 @@ impl ResourceID {
             return Err(ResourceIDError::InvalidFormat("".to_string()));
         };
 
-        Ok(Self { uri: rid.uri.replace(format!("{}_", CONSOLE_TAG).as_str(), "") })
+        Ok(Self {
+            uri: rid.uri.replace(format!("{}_", CONSOLE_TAG).as_str(), ""),
+        })
     }
 
     /// Create a derived ResourceID from a existing one. This nests the original ResourceID
@@ -61,9 +62,7 @@ impl ResourceID {
             derived += extension;
         }
 
-        ResourceID {
-            uri: derived
-        }
+        ResourceID { uri: derived }
     }
 
     /// Create a ResourceID with aspect parameters
@@ -79,7 +78,7 @@ impl ResourceID {
     /// assert_eq!(aspect.get_resource_path(), "[assembly:/templates/aspectdummy.aspect]([assembly:/_pro/effects/geometry/water.prim].entitytype,[modules:/zdisablecameracollisionaspect.class].entitytype).pc_entitytype");
     ///
     /// ```
-    pub fn create_aspect(&self, ids: Vec<&ResourceID>) -> ResourceID{
+    pub fn create_aspect(&self, ids: Vec<&ResourceID>) -> ResourceID {
         let mut rid = self.clone();
         for id in ids {
             rid.add_parameter(id.uri.as_str());
@@ -87,9 +86,9 @@ impl ResourceID {
         rid
     }
 
-    pub fn add_parameter(&mut self, param: &str){
+    pub fn add_parameter(&mut self, param: &str) {
         let params = self.get_parameters();
-        let new_uri = if params.is_empty(){
+        let new_uri = if params.is_empty() {
             match self.uri.rfind('.') {
                 Some(index) => {
                     let mut modified_string = self.uri.to_string();
@@ -100,8 +99,7 @@ impl ResourceID {
                 }
                 None => self.uri.to_string(), // If no dot found, return the original string
             }
-        }
-        else {
+        } else {
             match self.uri.rfind(").") {
                 Some(index) => {
                     let mut modified_string = self.uri.to_string();
@@ -145,11 +143,14 @@ impl ResourceID {
         }
 
         let parts = self.uri.splitn(open_count + 1, ']').collect::<Vec<&str>>();
-        let rid_str = format!("{}]{}", parts[0], parts[1]).chars().skip(open_count - 1).collect::<String>();
+        let rid_str = format!("{}]{}", parts[0], parts[1])
+            .chars()
+            .skip(open_count - 1)
+            .collect::<String>();
 
         match Self::from_string(rid_str.as_str()) {
-            Ok(r) => { r }
-            Err(_) => { self.clone() }
+            Ok(r) => r,
+            Err(_) => self.clone(),
         }
     }
 
@@ -185,15 +186,19 @@ impl ResourceID {
                 let protocol: String = self.uri.chars().take(n).collect();
                 Some(protocol.replace('[', ""))
             }
-            None => { None }
+            None => None,
         }
     }
 
     pub fn get_parameters(&self) -> Vec<String> {
         let re = Regex::new(r"(.*)\((.*)\)\.(.*)").unwrap();
-        if let Some(captures) = re.captures(self.uri.as_str()){
-            if let Some(cap) = captures.get(2){
-                return cap.as_str().split(',').map(|s: &str| s.to_string()).collect();
+        if let Some(captures) = re.captures(self.uri.as_str()) {
+            if let Some(cap) = captures.get(2) {
+                return cap
+                    .as_str()
+                    .split(',')
+                    .map(|s: &str| s.to_string())
+                    .collect();
             }
         }
         vec![]
@@ -216,7 +221,10 @@ impl ResourceID {
 
     pub fn is_valid(&self) -> bool {
         {
-            self.uri.starts_with('[') && !self.uri.contains("unknown") && !self.uri.contains('*') && self.uri.contains(']')
+            self.uri.starts_with('[')
+                && !self.uri.contains("unknown")
+                && !self.uri.contains('*')
+                && self.uri.contains(']')
         }
     }
 
@@ -230,7 +238,10 @@ mod tests {
     use super::*;
     #[test]
     fn test_parameters() {
-        let mut resource_id = ResourceID::from_string("[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx").unwrap();
+        let mut resource_id = ResourceID::from_string(
+            "[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx",
+        )
+        .unwrap();
         resource_id.add_parameter("lmao");
         assert_eq!(resource_id.get_resource_path(), "[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass](lmao).pc_fx");
         assert_eq!(resource_id.get_parameters(), ["lmao".to_string()]);
@@ -241,35 +252,52 @@ mod tests {
 
     #[test]
     fn test_get_inner_most_resource_path() {
-
-        let resource_id = ResourceID::from_string("[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx").unwrap();
+        let resource_id = ResourceID::from_string(
+            "[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx",
+        )
+        .unwrap();
         let inner_path = resource_id.get_inner_most_resource_path();
-        assert_eq!(inner_path.get_resource_path(), "[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].pc_fx");
+        assert_eq!(
+            inner_path.get_resource_path(),
+            "[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].pc_fx"
+        );
 
         let resource_id = ResourceID::from_string("[[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx](dx11).mate").unwrap();
         let inner_path = resource_id.get_inner_most_resource_path();
-        assert_eq!(inner_path.get_resource_path(), "[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].pc_fx");
+        assert_eq!(
+            inner_path.get_resource_path(),
+            "[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].pc_fx"
+        );
 
         let resource_id = ResourceID::from_string("[[[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx](dx11).mate](dx12).pc_mate").unwrap();
         let inner_path = resource_id.get_inner_most_resource_path();
-        assert_eq!(inner_path.get_resource_path(), "[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].pc_fx");
-
+        assert_eq!(
+            inner_path.get_resource_path(),
+            "[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].pc_fx"
+        );
     }
 
     #[test]
     fn text_get_inner_resource_path() {
-
-        let resource_id = ResourceID::from_string("[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx").unwrap();
+        let resource_id = ResourceID::from_string(
+            "[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx",
+        )
+        .unwrap();
         let inner_path = resource_id.get_inner_resource_path();
-        assert_eq!(inner_path.get_resource_path(), "[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].pc_fx");
+        assert_eq!(
+            inner_path.get_resource_path(),
+            "[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].pc_fx"
+        );
 
         let resource_id = ResourceID::from_string("[[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx](dx11).mate").unwrap();
         let inner_path = resource_id.get_inner_resource_path();
-        assert_eq!(inner_path.get_resource_path(), "[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].pc_fx");
+        assert_eq!(
+            inner_path.get_resource_path(),
+            "[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].pc_fx"
+        );
 
         let resource_id = ResourceID::from_string("[[[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx](dx11).mate](dx12).pc_mate").unwrap();
         let inner_path = resource_id.get_inner_resource_path();
         assert_eq!(inner_path.get_resource_path(), "[[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx](dx11).pc_mate");
     }
-
 }

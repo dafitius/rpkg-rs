@@ -1,16 +1,15 @@
-use std::{collections::HashMap, fs, path::Path};
+use crate::encryption::xtea::Xtea;
+use crate::encryption::xtea::XteaError;
+use crate::utils::normalize_path;
+use itertools::Itertools;
+use pathdiff::diff_paths;
 use std::collections::VecDeque;
+use std::io::Write;
 use std::ops::{Index, IndexMut};
 use std::path::PathBuf;
 use std::str::from_utf8;
-use std::io::Write;
-use itertools::Itertools;
-use crate::{encryption::xtea::Xtea};
-use pathdiff::diff_paths;
+use std::{collections::HashMap, fs, path::Path};
 use thiserror::Error;
-use crate::encryption::xtea::XteaError;
-use crate::utils::normalize_path;
-
 
 #[derive(Error, Debug)]
 pub enum IniFileError {
@@ -38,7 +37,6 @@ pub struct IniFileSection {
     name: String,
     options: HashMap<String, String>,
 }
-
 
 /// Represents a system config file for the Glacier engine
 /// ## Example contents
@@ -92,7 +90,6 @@ impl Default for IniFileSystem {
     }
 }
 
-
 impl IniFileSection {
     fn new(name: String) -> Self {
         Self {
@@ -138,23 +135,25 @@ impl Index<&str> for IniFileSection {
     type Output = str;
 
     fn index(&self, option_name: &str) -> &str {
-        self.options
-            .get(option_name)
-            .expect("Option not found")
+        self.options.get(option_name).expect("Option not found")
     }
 }
 
 impl IndexMut<&str> for IniFileSection {
     fn index_mut(&mut self, option_name: &str) -> &mut str {
-        self.options
-            .entry(option_name.to_string())
-            .or_default()
+        self.options.entry(option_name.to_string()).or_default()
     }
 }
 
 impl IniFile {
     pub fn new(name: &str) -> Self {
-        Self { name: name.to_string(), description: None, includes: vec![], sections: Default::default(), console_cmds: vec![] }
+        Self {
+            name: name.to_string(),
+            description: None,
+            includes: vec![],
+            sections: Default::default(),
+            console_cmds: vec![],
+        }
     }
     pub fn get_name(&self) -> String {
         self.name.to_string()
@@ -166,15 +165,11 @@ impl IniFile {
         self.sections.get(name)
     }
 
-    pub fn get_include(&self, include_name: &str) -> Option<&IniFile>{
+    pub fn get_include(&self, include_name: &str) -> Option<&IniFile> {
         self.includes.iter().find(|incl| incl.name == include_name)
     }
 
-    pub fn get_value(
-        &self,
-        section_name: &str,
-        option_name: &str,
-    ) -> Result<String, IniFileError> {
+    pub fn get_value(&self, section_name: &str, option_name: &str) -> Result<String, IniFileError> {
         match self.sections.get(section_name) {
             Some(v) => match v.options.get(option_name.to_uppercase().as_str()) {
                 Some(o) => Ok(o.clone()),
@@ -218,7 +213,11 @@ impl IniFile {
         for include in &self.includes {
             writeln!(writer, "!include {}", include.name).unwrap();
         }
-        for section_name in self.sections.keys().sorted_by(|a, b| Ord::cmp(&a.to_lowercase(), &b.to_lowercase())) {
+        for section_name in self
+            .sections
+            .keys()
+            .sorted_by(|a, b| Ord::cmp(&a.to_lowercase(), &b.to_lowercase()))
+        {
             if let Some(section) = self.get_section(section_name) {
                 section.write_section(writer);
             }
@@ -231,12 +230,17 @@ impl IniFile {
 
 impl IniFileSystem {
     pub fn new() -> Self {
-        Self { root: IniFile::new("thumbs.dat") }
+        Self {
+            root: IniFile::new("thumbs.dat"),
+        }
     }
 
     /// Loads an IniFileSystem from the given root file.
     pub fn load(&mut self, root_file: impl AsRef<Path>) -> Result<(), IniFileError> {
-        let ini_file = Self::load_from_path(root_file.as_ref(), PathBuf::from(root_file.as_ref()).parent().unwrap())?;
+        let ini_file = Self::load_from_path(
+            root_file.as_ref(),
+            PathBuf::from(root_file.as_ref()).parent().unwrap(),
+        )?;
         self.root = ini_file;
         Ok(())
     }
@@ -244,8 +248,8 @@ impl IniFileSystem {
     pub fn from(root_file: impl AsRef<Path>) -> Result<Self, IniFileError> {
         let mut ret = Self::new();
         match ret.load(root_file) {
-            Ok(_) => { Ok(ret) }
-            Err(e) => { Err(e) }
+            Ok(_) => Ok(ret),
+            Err(e) => Err(e),
         }
     }
 
@@ -253,18 +257,19 @@ impl IniFileSystem {
         let content = fs::read(path).map_err(IniFileError::IoError)?;
         let mut content_decrypted = from_utf8(content.as_ref()).unwrap_or("").to_string();
         if Xtea::is_encrypted_text_file(&content) {
-            content_decrypted = Xtea::decrypt_text_file(&content).map_err(IniFileError::DecryptionError)?;
+            content_decrypted =
+                Xtea::decrypt_text_file(&content).map_err(IniFileError::DecryptionError)?;
         }
 
         let ini_file_name = match diff_paths(path, working_directory) {
-            Some(relative_path) => {
-                relative_path.to_str().unwrap().to_string()
-            }
-            None => {
-                path.to_str().unwrap().to_string()
-            }
+            Some(relative_path) => relative_path.to_str().unwrap().to_string(),
+            None => path.to_str().unwrap().to_string(),
         };
-        Self::load_from_string(ini_file_name.as_str(), content_decrypted.as_str(), working_directory)
+        Self::load_from_string(
+            ini_file_name.as_str(),
+            content_decrypted.as_str(),
+            working_directory,
+        )
     }
 
     fn load_from_string(
@@ -284,16 +289,25 @@ impl IniFileSystem {
             } else if let Some(line) = line.strip_prefix('!') {
                 if let Some((command, value)) = line.split_once(' ') {
                     if command == "include" {
-                        let include = Self::load_from_path(working_directory.join(value).as_path(), working_directory)?;
+                        let include = Self::load_from_path(
+                            working_directory.join(value).as_path(),
+                            working_directory,
+                        )?;
                         ini_file.includes.push(include);
                     }
                 }
             } else if let Some(mut section_name) = line.strip_prefix('[') {
-                section_name = section_name.strip_suffix(']').ok_or(IniFileError::ParsingError("a section should always have a closing ] bracket".to_string()))?;
+                section_name = section_name
+                    .strip_suffix(']')
+                    .ok_or(IniFileError::ParsingError(
+                        "a section should always have a closing ] bracket".to_string(),
+                    ))?;
                 active_section = section_name.to_string();
                 if !ini_file.sections.contains_key(&active_section) {
-                    ini_file.sections
-                        .insert(active_section.clone(), IniFileSection::new(active_section.clone()));
+                    ini_file.sections.insert(
+                        active_section.clone(),
+                        IniFileSection::new(active_section.clone()),
+                    );
                 }
             } else if let Some(keyval) = line.strip_prefix("ConsoleCmd ") {
                 ini_file.console_cmds.push(keyval.to_string());
@@ -309,13 +323,17 @@ impl IniFileSystem {
     pub fn write_to_folder(&self, path: &Path) -> Result<(), IniFileError> {
         let mut folder = path;
         if folder.is_file() {
-            folder = path.parent().ok_or(IniFileError::InvalidInput("The export path cannot be empty".to_string()))?;
+            folder = path.parent().ok_or(IniFileError::InvalidInput(
+                "The export path cannot be empty".to_string(),
+            ))?;
         }
         fn write_children_to_folder(path: &Path, ini_file: &IniFile) -> Result<(), IniFileError> {
             let mut file_path = path.join(&ini_file.name);
             file_path = normalize_path(&file_path);
 
-            let parent_dir = file_path.parent().ok_or(IniFileError::InvalidInput("Invalid export path given".to_string()))?;
+            let parent_dir = file_path.parent().ok_or(IniFileError::InvalidInput(
+                "Invalid export path given".to_string(),
+            ))?;
             fs::create_dir_all(parent_dir)?;
 
             let mut writer = fs::OpenOptions::new()
@@ -330,9 +348,9 @@ impl IniFileSystem {
             for include in ini_file.includes.iter() {
                 match write_children_to_folder(parent_dir, include) {
                     Ok(_) => {}
-                    Err(e) => {return Err(e)}
+                    Err(e) => return Err(e),
                 };
-            };
+            }
             Ok(())
         }
 
@@ -394,11 +412,7 @@ impl IniFileSystem {
     }
 
     /// Retrieves the value of an option in a section from the IniFileSystem, including values from included files.
-    pub fn get_value(
-        &self,
-        section_name: &str,
-        option_name: &str,
-    ) -> Result<String, IniFileError> {
+    pub fn get_value(&self, section_name: &str, option_name: &str) -> Result<String, IniFileError> {
         let mut queue: VecDeque<&IniFile> = VecDeque::new();
         queue.push_back(&self.root);
         let mut latest_value: Option<String> = None;

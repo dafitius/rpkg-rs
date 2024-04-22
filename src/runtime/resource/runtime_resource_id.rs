@@ -1,13 +1,13 @@
 //! Runtime identifier for a Glacier Resource.
 //! Can be derived from a [ResourceID] md5 digest
 
+use crate::misc::resource_id::ResourceID;
+use binrw::BinRead;
+use md5::{Digest, Md5};
 use std::fmt;
 use std::fmt::{Debug, Formatter};
-use binrw::BinRead;
 use std::hash::Hash;
-use md5::{Digest, Md5};
 use thiserror::Error;
-use crate::misc::resource_id::ResourceID;
 
 #[derive(Error, Debug)]
 pub enum RuntimeResourceIDError {
@@ -20,8 +20,7 @@ pub enum RuntimeResourceIDError {
 
 /// Represents a runtime resource identifier.
 #[derive(BinRead, Default, PartialEq, Eq, Hash, Clone, Copy)]
-pub struct RuntimeResourceID
-{
+pub struct RuntimeResourceID {
     id: u64,
 }
 
@@ -33,7 +32,7 @@ impl PartialEq<u64> for RuntimeResourceID {
 
 impl From<u64> for RuntimeResourceID {
     fn from(value: u64) -> Self {
-        let mut rrid = RuntimeResourceID{id:value};
+        let mut rrid = RuntimeResourceID { id: value };
         if !rrid.is_valid() {
             rrid = RuntimeResourceID::invalid();
         }
@@ -57,43 +56,40 @@ impl RuntimeResourceID {
     pub fn to_hex_string(&self) -> String {
         format!("{:016X}", self.id)
     }
-    pub fn is_valid(&self) -> bool { self.id < 0x00FFFFFFFFFFFFFF }
+    pub fn is_valid(&self) -> bool {
+        self.id < 0x00FFFFFFFFFFFFFF
+    }
     pub fn invalid() -> Self {
-        Self{id: 0x00FFFFFFFFFFFFFF}
+        Self {
+            id: 0x00FFFFFFFFFFFFFF,
+        }
     }
 
     /// Create RuntimeResourceID from ResourceID
     pub fn from_resource_id(rid: &ResourceID) -> Self {
-
         let digest = Md5::digest(rid.get_resource_path());
         let mut hash = 0u64;
         for i in 1..8 {
             hash |= u64::from(digest[i]) << (8 * (7 - i));
         }
 
-        Self {
-            id: hash,
-        }
+        Self { id: hash }
     }
 
     ///prefer [from_resource_id] when possible
     pub fn from_raw_string(string: &str) -> Self {
-
         let digest = Md5::digest(string);
         let mut hash = 0u64;
         for i in 1..8 {
             hash |= u64::from(digest[i]) << (8 * (7 - i));
         }
 
-        Self {
-            id: hash,
-        }
+        Self { id: hash }
     }
 
     /// Create RuntimeResourceID from hexadecimal string
     /// Also accepts 0x prefixed strings
     pub fn from_hex_string(hex_string: &str) -> Result<Self, RuntimeResourceIDError> {
-
         let hex_string = if let Some(hex_string) = hex_string.strip_prefix("0x") {
             hex_string
         } else {
@@ -102,7 +98,7 @@ impl RuntimeResourceID {
 
         match u64::from_str_radix(hex_string, 16) {
             Ok(num) => {
-                let rrid = RuntimeResourceID{id:num};
+                let rrid = RuntimeResourceID { id: num };
                 if !rrid.is_valid() {
                     Err(RuntimeResourceIDError::InvalidID(num))
                 } else {
@@ -114,7 +110,7 @@ impl RuntimeResourceID {
     }
 }
 
-impl Debug for RuntimeResourceID{
+impl Debug for RuntimeResourceID {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.to_hex_string())
     }
@@ -126,7 +122,6 @@ impl fmt::Display for RuntimeResourceID {
     }
 }
 
-
 // Test section
 #[cfg(test)]
 mod tests {
@@ -135,14 +130,30 @@ mod tests {
 
     #[test]
     fn test_rrid_conversions() {
-        assert_eq!(RuntimeResourceID::from(0x00123456789ABCDE), 0x00123456789ABCDE);
+        assert_eq!(
+            RuntimeResourceID::from(0x00123456789ABCDE),
+            0x00123456789ABCDE
+        );
         assert_eq!(RuntimeResourceID::invalid(), 0x00FFFFFFFFFFFFFF);
-        assert_eq!(RuntimeResourceID::from_raw_string("hello world"), 0x00B63BBBE01EEED0);
-        assert_eq!(RuntimeResourceID::from_hex_string("0x00123456789ABCDE").unwrap(), 0x00123456789ABCDE);
-        assert_eq!(RuntimeResourceID::from_hex_string("00123456789ABCDE").unwrap(), 0x00123456789ABCDE);
+        assert_eq!(
+            RuntimeResourceID::from_raw_string("hello world"),
+            0x00B63BBBE01EEED0
+        );
+        assert_eq!(
+            RuntimeResourceID::from_hex_string("0x00123456789ABCDE").unwrap(),
+            0x00123456789ABCDE
+        );
+        assert_eq!(
+            RuntimeResourceID::from_hex_string("00123456789ABCDE").unwrap(),
+            0x00123456789ABCDE
+        );
 
-        let rid = ResourceID::from_string("[assembly:/_test/lib.a?/test_image.png].pc_webp").unwrap();
-        assert_eq!(RuntimeResourceID::from_resource_id(&rid), 0x00290D5B143172A3);
+        let rid =
+            ResourceID::from_string("[assembly:/_test/lib.a?/test_image.png].pc_webp").unwrap();
+        assert_eq!(
+            RuntimeResourceID::from_resource_id(&rid),
+            0x00290D5B143172A3
+        );
         assert_eq!(RuntimeResourceID::from(rid), 0x00290D5B143172A3);
     }
 

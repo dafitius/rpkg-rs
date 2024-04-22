@@ -1,15 +1,14 @@
-use std::{env};
-use std::path::PathBuf;
 use rpkg_rs::misc::resource_id::ResourceID;
-use rpkg_rs::runtime::resource::package_defs::{PartitionInfo};
+use rpkg_rs::runtime::resource::package_defs::PartitionInfo;
 use rpkg_rs::runtime::resource::resource_partition::ResourcePartition;
 use rpkg_rs::runtime::resource::runtime_resource_id::RuntimeResourceID;
+use std::env;
+use std::path::PathBuf;
 
 fn main() {
-
     let args: Vec<String> = env::args().collect();
 
-    if args.len() < 4{
+    if args.len() < 4 {
         eprintln!("Usage: cargo run --example <example_name> -- <runtime directory> <partition id (e.g. chunk0, dlc3)> <ResourceId to extract>");
         return;
     }
@@ -27,14 +26,16 @@ fn main() {
         println!("Failed parse partition id: {:?}", e);
         std::process::exit(0)
     });
-    
+
     let mut partition = ResourcePartition::new(partition_info);
     print!("Mounting partition {} ", &partition.get_partition_info().id);
 
-    partition.mount_resource_packages_in_partition(&runtime_path).unwrap_or_else(|e|{
-        println!("Failed parse resource partition: {:?}", e);
-        std::process::exit(0)
-    });
+    partition
+        .mount_resource_packages_in_partition(&runtime_path)
+        .unwrap_or_else(|e| {
+            println!("Failed parse resource partition: {:?}", e);
+            std::process::exit(0)
+        });
 
     println!("Extracting the resource");
     let file = partition.get_resource(&rrid).unwrap_or_else(|e| {
@@ -48,7 +49,10 @@ fn main() {
             println!("{}...", s.chars().take(100).collect::<String>())
         }
         Err(_) => {
-            println!("first bytes: {:?}", file.iter().take(50).collect::<Vec<_>>());
+            println!(
+                "first bytes: {:?}",
+                file.iter().take(50).collect::<Vec<_>>()
+            );
         }
     };
 }

@@ -15,10 +15,10 @@
 
 use thiserror::Error;
 
-pub mod utils;
 pub mod encryption;
 pub mod misc;
 pub mod runtime;
+pub mod utils;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum WoaVersion {
@@ -28,7 +28,7 @@ pub enum WoaVersion {
 }
 
 #[derive(Debug, Error)]
-pub enum GlacierResourceError{
+pub enum GlacierResourceError {
     #[error("Error reading the file: {0}")]
     IoError(#[from] std::io::Error),
 
@@ -36,23 +36,32 @@ pub enum GlacierResourceError{
     ReadError(String),
 }
 
-pub trait GlacierResource : Sized  {
+pub trait GlacierResource: Sized {
     type Output;
-    fn process_data<R: AsRef<[u8]>>(woa_version: WoaVersion, data: R) -> Result<Self::Output, GlacierResourceError>;
+    fn process_data<R: AsRef<[u8]>>(
+        woa_version: WoaVersion,
+        data: R,
+    ) -> Result<Self::Output, GlacierResourceError>;
 
-    fn serialize(_: &Self::Output, woa_version: WoaVersion) -> Result<Vec<u8>, GlacierResourceError>;
+    fn serialize(
+        _: &Self::Output,
+        woa_version: WoaVersion,
+    ) -> Result<Vec<u8>, GlacierResourceError>;
 
     fn get_video_memory_requirement(_: &Self::Output) -> u64;
     fn get_system_memory_requirement(_: &Self::Output) -> u64;
 }
 
 impl<I> GlacierResource for I
-    where
-        I: IntoIterator<Item = u8>
+where
+    I: IntoIterator<Item = u8>,
 {
     type Output = Vec<u8>;
 
-    fn process_data<R: AsRef<[u8]>>(_: WoaVersion, data: R) -> Result<Self::Output, GlacierResourceError> {
+    fn process_data<R: AsRef<[u8]>>(
+        _: WoaVersion,
+        data: R,
+    ) -> Result<Self::Output, GlacierResourceError> {
         let data: Vec<_> = data.as_ref().to_vec();
         Ok(data)
     }
