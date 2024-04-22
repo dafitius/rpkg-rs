@@ -146,10 +146,7 @@ impl PartitionManager {
             .collect()
     }
 
-    pub fn resource_infos(
-        &self,
-        rrid: &RuntimeResourceID,
-    ) -> Vec<(&PartitionId, &ResourceInfo)> {
+    pub fn resource_infos(&self, rrid: &RuntimeResourceID) -> Vec<(&PartitionId, &ResourceInfo)> {
         self.partitions_with_resource(rrid)
             .into_iter()
             .filter_map(|p_id| {
@@ -228,10 +225,7 @@ impl PartitionManager {
                                 size(info)
                             );
                         } else {
-                            println!(
-                                "\t- Addition: New occurrence, Size {} bytes",
-                                size(info)
-                            )
+                            println!("\t- Addition: New occurrence, Size {} bytes", size(info))
                         }
                         last_occurence = Some(info);
                     }

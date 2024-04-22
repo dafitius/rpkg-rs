@@ -24,18 +24,9 @@ impl ResourceInfo {
             .rev()
             .collect()
     }
-    
-    pub fn reference(
-        &self,
-        index: usize,
-    ) -> Option<&(RuntimeResourceID, ResourceReferenceFlags)> {
-        self.header.references.get(index)
-    }
-
     pub fn references(&self) -> &Vec<(RuntimeResourceID, ResourceReferenceFlags)> {
         &self.header.references
     }
-
     pub fn system_memory_requirement(&self) -> u32 {
         self.header.system_memory_requirement
     }

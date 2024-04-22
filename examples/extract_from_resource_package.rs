@@ -28,10 +28,12 @@ fn main() {
     });
 
     println!("Extracting the resource");
-    let file = rpkg.read_resource(&package_path, &rrid).unwrap_or_else(|e| {
-        println!("Failed extract resource: {}", e);
-        std::process::exit(0)
-    });
+    let file = rpkg
+        .read_resource(&package_path, &rrid)
+        .unwrap_or_else(|e| {
+            println!("Failed extract resource: {}", e);
+            std::process::exit(0)
+        });
 
     println!("Resource extracted!");
     match std::str::from_utf8(&*file) {

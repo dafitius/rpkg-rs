@@ -293,10 +293,7 @@ impl ResourcePartition {
         package_path = package_path.join(self.info.filename(patch_id));
         rpkg.read_resource(package_path.as_path(), rrid)
             .map_err(|e| {
-                ResourcePartitionError::ReadResourcePackageError(
-                    e,
-                    self.info.filename(patch_id),
-                )
+                ResourcePartitionError::ReadResourcePackageError(e, self.info.filename(patch_id))
             })
     }
 

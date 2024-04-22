@@ -251,9 +251,7 @@ pub enum ResourceReferenceFlags {
 impl ResourceReferenceFlags {
     pub fn language_code(&self) -> u8 {
         match self {
-            ResourceReferenceFlags::Legacy(b) => {
-                convert_old_flags_to_new_type(b).language_code()
-            }
+            ResourceReferenceFlags::Legacy(b) => convert_old_flags_to_new_type(b).language_code(),
             ResourceReferenceFlags::Standard(b) => b & 0b0001_1111,
         }
     }

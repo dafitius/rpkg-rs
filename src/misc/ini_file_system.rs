@@ -102,15 +102,12 @@ impl IniFileSection {
         self.name.to_owned()
     }
 
-    pub fn get(&self, option_name: &str) -> Option<&String> {
-        self.options.get(option_name)
-    }
-    pub fn has_option(&self, option_name: &str) -> bool {
-        self.options.get(option_name).is_some()
+    pub fn options(&self) -> &HashMap<String, String> {
+        &self.options
     }
 
-    pub fn options(&self) -> Vec<&String> {
-        self.options.keys().collect()
+    pub fn has_option(&self, option_name: &str) -> bool {
+        self.options.get(option_name).is_some()
     }
 
     fn set_option(&mut self, option_name: &str, value: &str) {
@@ -158,18 +155,23 @@ impl IniFile {
     pub fn name(&self) -> String {
         self.name.to_string()
     }
-    pub fn sections(&self) -> Vec<&IniFileSection> {
-        self.sections.values().collect()
-    }
-    pub fn section(&self, name: &str) -> Option<&IniFileSection> {
-        self.sections.get(name)
+    pub fn sections(&self) -> &HashMap<String, IniFileSection> {
+        &self.sections
     }
 
-    pub fn included_file(&self, include_name: &str) -> Option<&IniFile> {
+    pub fn includes(&self) -> &Vec<IniFile> {
+        &self.includes
+    }
+
+    pub fn find_include(&self, include_name: &str) -> Option<&IniFile> {
         self.includes.iter().find(|incl| incl.name == include_name)
     }
 
-    pub fn option(&self, section_name: &str, option_name: &str) -> Result<String, IniFileError> {
+    pub fn get_option(
+        &self,
+        section_name: &str,
+        option_name: &str,
+    ) -> Result<String, IniFileError> {
         match self.sections.get(section_name) {
             Some(v) => match v.options.get(option_name.to_uppercase().as_str()) {
                 Some(o) => Ok(o.clone()),
@@ -218,7 +220,7 @@ impl IniFile {
             .keys()
             .sorted_by(|a, b| Ord::cmp(&a.to_lowercase(), &b.to_lowercase()))
         {
-            if let Some(section) = self.section(section_name) {
+            if let Some(section) = self.sections().get(section_name) {
                 section.write_section(writer);
             }
         }
@@ -418,7 +420,7 @@ impl IniFileSystem {
         let mut latest_value: Option<String> = None;
 
         while let Some(current_file) = queue.pop_front() {
-            if let Ok(value) = current_file.option(section_name, option_name) {
+            if let Ok(value) = current_file.get_option(section_name, option_name) {
                 // Update the latest value found
                 latest_value = Some(value.clone());
             }
