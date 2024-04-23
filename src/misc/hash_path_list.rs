@@ -5,6 +5,7 @@ use rayon::prelude::IntoParallelIterator;
 use std::collections::HashMap;
 use std::fs::read_to_string;
 use std::path::Path;
+use std::str::FromStr;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -17,7 +18,7 @@ pub enum PathListError {
 }
 
 /// A rainbow table of hashed paths with associated paths.
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct PathList {
     entries: HashMap<RuntimeResourceID, Option<ResourceID>>,
 }
@@ -61,7 +62,7 @@ impl PathList {
 
                 if let Ok(id) = u64::from_str_radix(hash, 16) {
                     if let Some(path) = path {
-                        if let Ok(rid) = ResourceID::from_string(path) {
+                        if let Ok(rid) = ResourceID::from_str(path) {
                             if rid.is_valid() {
                                 return Some((RuntimeResourceID::from(id), Some(rid)));
                             }

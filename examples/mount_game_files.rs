@@ -102,7 +102,7 @@ fn main() {
                 .ok()
                 .expect("Failed to read line");
 
-            let rid = ResourceID::from_string(input_string.as_str()).unwrap_or_else(|_| {
+            let rid = ResourceID::from_str_checked(input_string.as_str()).unwrap_or_else(|_| {
                 println!("Given ResourceID is invalid");
                 std::process::exit(0)
             });

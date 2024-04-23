@@ -53,6 +53,7 @@ pub struct IniFileSection {
 /// ConsoleCmd UI_EnableMouseEvents 0
 /// ....
 /// ```
+#[derive(Debug)]
 pub struct IniFile {
     name: String,
     description: Option<String>,
@@ -80,14 +81,9 @@ pub struct IniFile {
 ///     println!("Runtime path: {}", runtime_path);
 ///  }
 /// ```
+#[derive(Default, Debug)]
 pub struct IniFileSystem {
     root: IniFile,
-}
-
-impl Default for IniFileSystem {
-    fn default() -> Self {
-        Self::new()
-    }
 }
 
 impl IniFileSection {
@@ -139,6 +135,18 @@ impl Index<&str> for IniFileSection {
 impl IndexMut<&str> for IniFileSection {
     fn index_mut(&mut self, option_name: &str) -> &mut str {
         self.options.entry(option_name.to_string()).or_default()
+    }
+}
+
+impl Default for IniFile {
+    fn default() -> Self {
+        Self {
+            name: "thumbs.dat".to_string(),
+            description: Some(String::from("System config file for the engine")),
+            includes: vec![],
+            sections: Default::default(),
+            console_cmds: vec![],
+        }
     }
 }
 

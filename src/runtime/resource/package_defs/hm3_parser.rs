@@ -4,6 +4,7 @@ use crate::runtime::resource::package_defs::{
     PackageDefinitionError, PackageDefinitionParser, PartitionId, PartitionInfo, PartitionType,
 };
 use regex::Regex;
+use std::str::FromStr;
 
 pub struct HM3Parser;
 
@@ -29,8 +30,8 @@ impl PackageDefinitionParser for HM3Parser {
             if partition_regex.is_match(line) {
                 if let Some(m) = partition_regex.captures_iter(line).next() {
                     partitions.push(PartitionInfo {
-                        name: (m[1]).parse().ok(),
-                        parent: find_parent_id(&partitions, (m[2]).parse().unwrap()),
+                        name: m[1].parse().ok(),
+                        parent: find_parent_id(&partitions, m[2].parse().unwrap()),
                         id: PartitionId {
                             part_type: match &m[3] {
                                 "standard" => PartitionType::Standard,
@@ -39,7 +40,7 @@ impl PackageDefinitionParser for HM3Parser {
                             },
                             index: partitions.len(),
                         },
-                        patch_level: (m[4]).parse().unwrap(),
+                        patch_level: m[4].parse().unwrap(),
                         roots: vec![],
                     });
                 }
@@ -47,7 +48,7 @@ impl PackageDefinitionParser for HM3Parser {
                 if let Some(m) = resource_path_regex.captures_iter(line).next() {
                     if let Some(current_partition) = partitions.last_mut() {
                         if let Ok(rid) =
-                            ResourceID::from_string(format!("{}.{}", &m[1], &m[2]).as_str())
+                            ResourceID::from_str(format!("{}.{}", &m[1], &m[2]).as_str())
                         {
                             current_partition.add_root(rid);
                         }

@@ -42,7 +42,12 @@ pub struct ResourcePackage {
     unneeded_resource_count: u32,
 
     #[br(if(is_patch))]
-    #[br(little, count = unneeded_resource_count)]
+    #[br(little, count = unneeded_resource_count, map = |ids: Vec<u64>| {
+    match unneeded_resource_count{
+        0 => None,
+        _ => Some(ids.into_iter().map(RuntimeResourceID::from).collect::<Vec<_>>()),
+    }
+    })]
     unneeded_resources: Option<Vec<RuntimeResourceID>>,
 
     #[br(parse_with = resource_parser, args(header.file_count))]
@@ -54,7 +59,11 @@ fn resource_parser(file_count: u32) -> BinResult<HashMap<RuntimeResourceID, Reso
     let mut map = HashMap::new();
     let mut resource_entries = vec![];
     for _ in 0..file_count {
-        resource_entries.push(PackageOffsetInfo::read_options(reader, endian, ())?);
+        resource_entries.push(PackageOffsetInfo {
+            runtime_resource_id: u64::read_options(reader, endian, ())?.into(),
+            data_offset: u64::read_options(reader, endian, ())?,
+            compressed_size_and_is_scrambled_flag: u32::read_options(reader, endian, ())?,
+        });
     }
 
     let mut resource_metadata = vec![];
@@ -209,7 +218,7 @@ pub struct PackageHeader {
 }
 
 #[allow(dead_code)]
-#[derive(BinRead)]
+#[derive(Copy, Clone)]
 pub struct PackageOffsetInfo {
     pub(crate) runtime_resource_id: RuntimeResourceID,
     pub(crate) data_offset: u64,
@@ -230,7 +239,7 @@ impl PackageOffsetInfo {
 }
 
 #[allow(dead_code)]
-#[derive(BinRead)]
+#[derive(BinRead, Clone, PartialEq, Eq)]
 pub struct ResourceHeader {
     pub m_type: [u8; 4],
     references_chunk_size: u32,
@@ -243,6 +252,7 @@ pub struct ResourceHeader {
     pub references: Vec<(RuntimeResourceID, ResourceReferenceFlags)>,
 }
 
+#[derive(Copy, Clone, Eq, PartialEq)]
 pub enum ResourceReferenceFlags {
     Legacy(u8),
     Standard(u8),
@@ -314,12 +324,14 @@ fn read_references() -> BinResult<Vec<(RuntimeResourceID, ResourceReferenceFlags
             .map_ok(ResourceReferenceFlags::Standard)
             .collect::<BinResult<Vec<_>>>()?;
         let rrids: Vec<RuntimeResourceID> = (0..reference_count)
-            .map(|_| RuntimeResourceID::read_le(reader))
+            .map(|_| u64::read_le(reader))
+            .map_ok(RuntimeResourceID::from)
             .collect::<BinResult<Vec<_>>>()?;
         (rrids, flags)
     } else {
         let rrids: Vec<RuntimeResourceID> = (0..reference_count)
-            .map(|_| RuntimeResourceID::read_le(reader))
+            .map(|_| u64::read_le(reader))
+            .map_ok(RuntimeResourceID::from)
             .collect::<BinResult<Vec<_>>>()?;
         let flags: Vec<ResourceReferenceFlags> = (0..reference_count)
             .map(|_| u8::read_le(reader))

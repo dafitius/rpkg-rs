@@ -15,7 +15,7 @@ fn main() {
 
     //set the args
     let runtime_path = PathBuf::from(&args[1]);
-    let rid = ResourceID::from_string(&args[3]).unwrap_or_else(|_| {
+    let rid = ResourceID::from_str_checked(&args[3]).unwrap_or_else(|_| {
         println!("Given ResourceID is invalid");
         std::process::exit(0)
     });

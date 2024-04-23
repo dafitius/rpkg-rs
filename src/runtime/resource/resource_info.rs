@@ -3,6 +3,7 @@ use std::fmt;
 
 use super::resource_package::*;
 
+#[derive(Clone)]
 pub struct ResourceInfo {
     pub(crate) entry: PackageOffsetInfo,
     pub(crate) header: ResourceHeader,
