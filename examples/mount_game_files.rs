@@ -6,6 +6,7 @@ use rpkg_rs::runtime::resource::runtime_resource_id::RuntimeResourceID;
 use std::io::{stdin, Write};
 use std::path::PathBuf;
 use std::{env, io};
+use std::str::FromStr;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -26,8 +27,8 @@ fn main() {
     let app_options = &thumbs.root()["application"];
 
     if let (Some(proj_path), Some(relative_runtime_path)) = (
-        app_options.get("PROJECT_PATH"),
-        app_options.get("RUNTIME_PATH"),
+        app_options.options().get("PROJECT_PATH"),
+        app_options.options().get("RUNTIME_PATH"),
     ) {
         let runtime_path = PathBuf::from(format!(
             "{}\\{proj_path}\\{relative_runtime_path}",
@@ -102,7 +103,7 @@ fn main() {
                 .ok()
                 .expect("Failed to read line");
 
-            let rid = ResourceID::from_str_checked(input_string.as_str()).unwrap_or_else(|_| {
+            let rid = ResourceID::from_str(input_string.as_str()).unwrap_or_else(|_| {
                 println!("Given ResourceID is invalid");
                 std::process::exit(0)
             });

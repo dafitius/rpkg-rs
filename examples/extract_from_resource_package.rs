@@ -3,6 +3,7 @@ use rpkg_rs::runtime::resource::resource_package::ResourcePackage;
 use rpkg_rs::runtime::resource::runtime_resource_id::RuntimeResourceID;
 use std::env;
 use std::path::PathBuf;
+use std::str::FromStr;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -14,7 +15,7 @@ fn main() {
 
     //set the args
     let package_path = PathBuf::from(&args[1]);
-    let rid = ResourceID::from_str_checked(&args[2]).unwrap_or_else(|_| {
+    let rid = ResourceID::from_str(&args[2]).unwrap_or_else(|_| {
         println!("Given ResourceID is invalid");
         std::process::exit(0)
     });

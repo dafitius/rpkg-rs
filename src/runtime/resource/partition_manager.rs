@@ -115,18 +115,13 @@ impl PartitionManager {
         }
     }
 
-    pub fn partition(
+    pub fn find_partition(
         &self,
         partition_id: PartitionId,
-    ) -> Result<&ResourcePartition, PackageManagerError> {
-        let partition = self
-            .partitions
+    ) -> Option<&ResourcePartition> {
+        self.partitions
             .iter()
             .find(|partition| partition.partition_info().id == partition_id)
-            .ok_or(PackageManagerError::PartitionNotFound(
-                partition_id.to_string(),
-            ))?;
-        Ok(partition)
     }
 
     pub fn partitions(&self) -> Vec<&ResourcePartition> {
@@ -169,7 +164,7 @@ impl PartitionManager {
             .iter()
             .find(|partition| partition.partition_info().id == *partition_id);
         if let Some(partition) = partition {
-            match partition.resource_info(rrid) {
+            match partition.get_resource_info(rrid) {
                 Ok(info) => Ok(info),
                 Err(e) => Err(PackageManagerError::PartitionError(e)),
             }
@@ -197,7 +192,7 @@ impl PartitionManager {
                 .clone()
                 .into_iter()
                 .chain(deletions.clone().into_iter())
-                .collect::<Vec<&PatchId>>();
+                .collect::<Vec<PatchId>>();
             for occurence in occurrences.iter().sorted() {
                 println!(
                     "{}: {}",
@@ -209,7 +204,7 @@ impl PartitionManager {
                             "Patch"
                         }
                     },
-                    partition.partition_info().filename(occurence)
+                    partition.partition_info().filename(*occurence)
                 );
 
                 if deletions.contains(occurence) {
@@ -217,7 +212,7 @@ impl PartitionManager {
                     last_occurence = None;
                 }
                 if changes.contains(occurence) {
-                    if let Ok(info) = partition.resource_info_from(rrid, occurence) {
+                    if let Ok(info) = partition.resource_info_from(rrid, *occurence) {
                         if let Some(last_info) = last_occurence {
                             println!(
                                 "\t- Modification: Size changed from {} to {}",
