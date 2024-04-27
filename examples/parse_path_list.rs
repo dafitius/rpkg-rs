@@ -4,6 +4,7 @@ use std::io::{stdin, Write};
 use std::path::Path;
 use std::{env, io};
 
+#[cfg(feature = "path-list")]
 fn main() {
     let args: Vec<String> = env::args().collect();
 
