@@ -8,6 +8,11 @@ use std::fmt::{Debug, Formatter};
 use std::hash::Hash;
 use thiserror::Error;
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+#[cfg(feature = "serde")]
+use serde_hex::{SerHex,StrictPfx};
+
 #[derive(Error, Debug)]
 pub enum RuntimeResourceIDError {
     #[error("{} can't represent a valid runtimeResourceID", _0)]
@@ -19,7 +24,9 @@ pub enum RuntimeResourceIDError {
 
 /// Represents a runtime resource identifier.
 #[derive(Default, PartialEq, Eq, Hash, Clone, Copy)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct RuntimeResourceID {
+    #[cfg_attr(feature = "serde", serde(with = "SerHex::<StrictPfx>"))]
     id: u64,
 }
 
@@ -120,6 +127,8 @@ impl fmt::Display for RuntimeResourceID {
         write!(f, "{}", self.to_hex_string())
     }
 }
+
+
 
 // Test section
 #[cfg(test)]

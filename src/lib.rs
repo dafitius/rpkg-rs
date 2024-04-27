@@ -15,12 +15,17 @@
 
 use thiserror::Error;
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
+
 pub mod encryption;
 pub mod misc;
 pub mod runtime;
 pub mod utils;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub enum WoaVersion {
     HM2016,
     HM2,

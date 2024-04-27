@@ -14,6 +14,9 @@ use regex::Regex;
 use std::str::FromStr;
 use thiserror::Error;
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 static CONSOLE_TAG: &str = "pc";
 
 #[derive(Error, Debug)]
@@ -23,6 +26,7 @@ pub enum ResourceIDError {
 }
 
 #[derive(Clone, Debug, Default, Hash, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ResourceID {
     uri: String,
 }

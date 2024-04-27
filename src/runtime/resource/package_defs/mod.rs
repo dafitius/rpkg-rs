@@ -10,6 +10,9 @@ use std::fmt::Display;
 use std::str::FromStr;
 use thiserror::Error;
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 use crate::encryption::xtea::XteaError;
 use crate::misc::resource_id::ResourceID;
 use crate::runtime::resource::package_defs::PackageDefinitionSource::{HM2, HM2016, HM3};
@@ -46,6 +49,7 @@ pub enum PartitionInfoError {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum PartitionType {
     Standard,
     Addon,
@@ -55,6 +59,7 @@ pub enum PartitionType {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct PartitionId {
     pub part_type: PartitionType,
     pub index: usize,
@@ -140,6 +145,7 @@ impl Display for PartitionId {
 
 /// Represents information about a resource partition.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct PartitionInfo {
     /// The name of the partition, if available.
     pub name: Option<String>,

@@ -1,4 +1,8 @@
+
+
+#[cfg(feature = "path-list")]
 use rpkg_rs::misc::hash_path_list::PathList;
+
 use rpkg_rs::runtime::resource::runtime_resource_id::RuntimeResourceID;
 use std::io::{stdin, Write};
 use std::path::Path;

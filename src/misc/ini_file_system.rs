@@ -11,6 +11,9 @@ use std::str::from_utf8;
 use std::{collections::HashMap, fs, path::Path};
 use thiserror::Error;
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 #[derive(Error, Debug)]
 pub enum IniFileError {
     #[error("Option ({}) not found", _0)]
@@ -33,6 +36,7 @@ pub enum IniFileError {
 }
 
 #[derive(Default, Debug)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct IniFileSection {
     name: String,
     options: HashMap<String, String>,
@@ -54,6 +58,7 @@ pub struct IniFileSection {
 /// ....
 /// ```
 #[derive(Debug)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct IniFile {
     name: String,
     description: Option<String>,
@@ -82,6 +87,7 @@ pub struct IniFile {
 ///  }
 /// ```
 #[derive(Default, Debug)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct IniFileSystem {
     root: IniFile,
 }
