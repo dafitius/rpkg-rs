@@ -102,7 +102,7 @@ impl PartitionManager {
         let partition = self
             .partitions
             .iter()
-            .find(|partition| partition.partition_info().id == partition_id);
+            .find(|partition| partition.partition_info().id() == partition_id);
         if let Some(partition) = partition {
             match partition.read_resource(&rrid) {
                 Ok(data) => Ok(data),
@@ -121,19 +121,19 @@ impl PartitionManager {
     ) -> Option<&ResourcePartition> {
         self.partitions
             .iter()
-            .find(|partition| partition.partition_info().id == partition_id)
+            .find(|partition| partition.partition_info().id() == partition_id)
     }
 
     pub fn partitions(&self) -> Vec<&ResourcePartition> {
         self.partitions.iter().collect::<Vec<&ResourcePartition>>()
     }
 
-    pub fn partitions_with_resource(&self, rrid: &RuntimeResourceID) -> Vec<&PartitionId> {
+    pub fn partitions_with_resource(&self, rrid: &RuntimeResourceID) -> Vec<PartitionId> {
         self.partitions
             .iter()
             .filter_map(|partition| {
                 if partition.contains(rrid) {
-                    Some(&partition.partition_info().id)
+                    Some(partition.partition_info().id())
                 } else {
                     None
                 }
@@ -141,11 +141,11 @@ impl PartitionManager {
             .collect()
     }
 
-    pub fn resource_infos(&self, rrid: &RuntimeResourceID) -> Vec<(&PartitionId, &ResourceInfo)> {
+    pub fn resource_infos(&self, rrid: &RuntimeResourceID) -> Vec<(PartitionId, &ResourceInfo)> {
         self.partitions_with_resource(rrid)
             .into_iter()
             .filter_map(|p_id| {
-                if let Ok(info) = self.resource_info_from(p_id, rrid) {
+                if let Ok(info) = self.resource_info_from(&p_id, rrid) {
                     Some((p_id, info))
                 } else {
                     None
@@ -162,7 +162,7 @@ impl PartitionManager {
         let partition = self
             .partitions
             .iter()
-            .find(|partition| partition.partition_info().id == *partition_id);
+            .find(|partition| partition.partition_info().id() == *partition_id);
         if let Some(partition) = partition {
             match partition.get_resource_info(rrid) {
                 Ok(info) => Ok(info),

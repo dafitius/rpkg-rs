@@ -241,12 +241,12 @@ impl PackageOffsetInfo {
 #[allow(dead_code)]
 #[derive(BinRead, Clone, PartialEq, Eq)]
 pub struct ResourceHeader {
-    pub m_type: [u8; 4],
+    pub(crate) m_type: [u8; 4],
     references_chunk_size: u32,
     states_chunk_size: u32,
-    pub data_size: u32,
-    pub system_memory_requirement: u32,
-    pub video_memory_requirement: u32,
+    pub(crate) data_size: u32,
+    pub(crate) system_memory_requirement: u32,
+    pub(crate) video_memory_requirement: u32,
 
     #[br(if (references_chunk_size > 0), parse_with = read_references)]
     pub references: Vec<(RuntimeResourceID, ResourceReferenceFlags)>,
