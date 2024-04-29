@@ -3,11 +3,11 @@ use std::path::PathBuf;
 use thiserror::Error;
 
 use super::resource_partition::{PatchId, ResourcePartition, ResourcePartitionError};
-use crate::runtime::resource::package_defs::{
+use crate::resource::pdefs::{
     PackageDefinitionError, PackageDefinitionSource, PartitionId, PartitionInfo,
 };
-use crate::runtime::resource::resource_info::ResourceInfo;
-use crate::runtime::resource::runtime_resource_id::RuntimeResourceID;
+use crate::resource::resource_info::ResourceInfo;
+use crate::resource::runtime_resource_id::RuntimeResourceID;
 
 #[derive(Debug, Error)]
 pub enum PackageManagerError {

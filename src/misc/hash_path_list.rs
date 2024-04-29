@@ -1,5 +1,5 @@
 use crate::misc::resource_id::ResourceID;
-use crate::runtime::resource::runtime_resource_id::RuntimeResourceID;
+use crate::resource::runtime_resource_id::RuntimeResourceID;
 use rayon::iter::ParallelIterator;
 use rayon::prelude::IntoParallelIterator;
 use std::collections::HashMap;

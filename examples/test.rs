@@ -1,4 +1,4 @@
-use rpkg_rs::runtime::resource::runtime_resource_id::RuntimeResourceID;
+use rpkg_rs::resource::runtime_resource_id::RuntimeResourceID;
 
 pub fn main(){
     let resource_id = RuntimeResourceID::from(0x00097AA87B144150);

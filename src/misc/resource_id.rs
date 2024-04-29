@@ -9,7 +9,7 @@
 //! [[assembly:/images/sprites/player.jpg](asspritesheet).pc_jpeg].pc_png
 //! ```
 
-use crate::runtime::resource::runtime_resource_id::RuntimeResourceID;
+use crate::resource::runtime_resource_id::RuntimeResourceID;
 use regex::Regex;
 use std::str::FromStr;
 use thiserror::Error;
@@ -182,13 +182,18 @@ impl ResourceID {
 
     /// Get the base ResourceID within a derived ResourceID
     /// ```
-    ///  use std::str::FromStr;
-    ///  use rpkg_rs::misc::resource_id::ResourceID;
+    /// # use std::str::FromStr;
+    /// # use rpkg_rs::misc::resource_id::ResourceID;
+    /// # use rpkg_rs::misc::resource_id::ResourceIDError;
+    /// # fn main() -> Result<(), ResourceIDError>{
+    ///  
+    ///     let resource_id = ResourceID::from_str("[[[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx](dx11).mate](dx12).pc_mate")?;
+    ///     let inner_path = resource_id.inner_resource_path();
     ///
-    ///  let resource_id = ResourceID::from_str("[[[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx](dx11).mate](dx12).pc_mate")?;
-    ///  let inner_path = resource_id.inner_resource_path();
-    ///
-    ///  assert_eq!(inner_path.resource_path(), "[[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx](dx11).pc_mate");
+    ///     assert_eq!(inner_path.resource_path(), "[[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx](dx11).pc_mate");
+    /// #   Ok(())
+    /// }
+    /// 
     /// ```
     pub fn inner_resource_path(&self) -> ResourceID {
         let open_count = self.uri.chars().filter(|c| *c == '[').count();

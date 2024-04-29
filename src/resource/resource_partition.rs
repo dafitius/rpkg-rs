@@ -1,6 +1,6 @@
-use crate::runtime::resource::package_defs::PartitionInfo;
-use crate::runtime::resource::partition_manager::PartitionState;
-use crate::runtime::resource::resource_info::ResourceInfo;
+use crate::resource::pdefs::PartitionInfo;
+use crate::resource::partition_manager::PartitionState;
+use crate::resource::resource_info::ResourceInfo;
 use crate::{utils, GlacierResource, GlacierResourceError, WoaVersion};
 use regex::Regex;
 use std::cmp::Ordering;
@@ -10,7 +10,7 @@ use std::{collections::HashMap, path::Path};
 use std::{fmt, io};
 use thiserror::Error;
 
-use crate::runtime::resource::resource_package::{ResourcePackage, ResourcePackageError};
+use crate::resource::resource_package::{ResourcePackage, ResourcePackageError};
 
 use super::runtime_resource_id::RuntimeResourceID;
 

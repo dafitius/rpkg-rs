@@ -1,8 +1,8 @@
 use rpkg_rs::misc::ini_file_system::IniFileSystem;
 use rpkg_rs::misc::resource_id::ResourceID;
-use rpkg_rs::runtime::resource::package_defs::PackageDefinitionSource;
-use rpkg_rs::runtime::resource::partition_manager::{PartitionManager, PartitionState};
-use rpkg_rs::runtime::resource::runtime_resource_id::RuntimeResourceID;
+use rpkg_rs::resource::pdefs::PackageDefinitionSource;
+use rpkg_rs::resource::partition_manager::{PartitionManager, PartitionState};
+use rpkg_rs::resource::runtime_resource_id::RuntimeResourceID;
 use std::io::{stdin, Write};
 use std::path::PathBuf;
 use std::{env, io};

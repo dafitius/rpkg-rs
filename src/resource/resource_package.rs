@@ -1,5 +1,5 @@
-use crate::runtime::resource::resource_info::ResourceInfo;
-use crate::runtime::resource::resource_package::ReferenceType::{INSTALL, NORMAL, WEAK};
+use crate::resource::resource_info::ResourceInfo;
+use crate::resource::resource_package::ReferenceType::{INSTALL, NORMAL, WEAK};
 use binrw::{parser, BinRead, BinReaderExt, BinResult};
 use itertools::Itertools;
 use lz4::block::decompress_to_buffer;
@@ -13,7 +13,7 @@ use std::path::Path;
 use std::{fmt, io};
 use thiserror::Error;
 
-use crate::runtime::resource::runtime_resource_id::RuntimeResourceID;
+use crate::resource::runtime_resource_id::RuntimeResourceID;
 
 #[derive(Debug, Error)]
 pub enum ResourcePackageError {

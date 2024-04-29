@@ -1,6 +1,6 @@
 use rpkg_rs::misc::resource_id::ResourceID;
-use rpkg_rs::runtime::resource::resource_package::ResourcePackage;
-use rpkg_rs::runtime::resource::runtime_resource_id::RuntimeResourceID;
+use rpkg_rs::resource::resource_package::ResourcePackage;
+use rpkg_rs::resource::runtime_resource_id::RuntimeResourceID;
 use std::env;
 use std::path::PathBuf;
 use std::str::FromStr;

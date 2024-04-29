@@ -1,6 +1,6 @@
 use crate::encryption::xtea::Xtea;
 use crate::misc::resource_id::ResourceID;
-use crate::runtime::resource::package_defs::{
+use crate::resource::pdefs::{
     PackageDefinitionError, PackageDefinitionParser, PartitionId, PartitionInfo, PartitionType,
 };
 use regex::Regex;

@@ -1,4 +1,4 @@
-use crate::runtime::resource::runtime_resource_id::RuntimeResourceID;
+use crate::resource::runtime_resource_id::RuntimeResourceID;
 use std::fmt;
 use super::resource_package::*;
 

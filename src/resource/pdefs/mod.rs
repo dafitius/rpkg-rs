@@ -1,10 +1,8 @@
-// runtime/resource/partition_parsing/mod.rs
-
 pub mod h2016_parser;
 pub mod hm2_parser;
 pub mod hm3_parser;
 
-use crate::runtime::resource::resource_partition::PatchId;
+use crate::resource::resource_partition::PatchId;
 use regex::Regex;
 use std::fmt::Display;
 use std::str::FromStr;
@@ -15,8 +13,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::encryption::xtea::XteaError;
 use crate::misc::resource_id::ResourceID;
-use crate::runtime::resource::package_defs::PackageDefinitionSource::{HM2, HM2016, HM3};
-use crate::runtime::resource::package_defs::PartitionType::{
+use crate::resource::pdefs::PackageDefinitionSource::{HM2, HM2016, HM3};
+use crate::resource::pdefs::PartitionType::{
     Dlc, LanguageDlc, LanguageStandard, Standard,
 };
 use crate::WoaVersion;
