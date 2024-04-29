@@ -27,6 +27,7 @@ serde = { version = "1.0.199", optional = true, features = ["derive"] }
 serde-hex = { version = "0.1.0", optional = true }
 
 [features]
+default = ["path-list", "serde"]
 path-list = ["dep:rayon"]
 serde = ["dep:serde", "dep:serde-hex"]
 
