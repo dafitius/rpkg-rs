@@ -80,7 +80,7 @@ fn main() {
 
         //ignore modded patches
         for partition in package_defs.iter_mut() {
-            partition.patch_level = 9
+            partition.set_max_patch_level(9);
         }
 
         package_manager

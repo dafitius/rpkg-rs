@@ -208,6 +208,10 @@ impl PartitionInfo {
     pub fn max_patch_level(&self) -> usize {
         self.patch_level
     }
+
+    pub fn set_max_patch_level(&mut self, patch_level: usize) {
+        self.patch_level = patch_level
+    }
 }
 
 pub trait PackageDefinitionParser {

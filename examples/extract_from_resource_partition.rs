@@ -29,7 +29,7 @@ fn main() {
     });
 
     let mut partition = ResourcePartition::new(partition_info);
-    print!("Mounting partition {} ", &partition.partition_info().id);
+    print!("Mounting partition {} ", &partition.partition_info().id());
 
     partition
         .mount_resource_packages_in_partition(&runtime_path)
