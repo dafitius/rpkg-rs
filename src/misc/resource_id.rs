@@ -84,7 +84,7 @@ impl ResourceID {
     /// # use std::str::FromStr;
     /// # use rpkg_rs::misc::resource_id::ResourceID;     
     /// # use rpkg_rs::misc::resource_id::ResourceIDError;
-    /// 
+    ///
     /// # fn main() -> Result<(), ResourceIDError>{
     ///  
     ///     let resource_id = ResourceID::from_str("[assembly:/templates/aspectdummy.aspect].pc_entitytype")?;
@@ -138,16 +138,14 @@ impl ResourceID {
     pub fn resource_path(&self) -> String {
         let mut platform_uri = String::new();
 
-        if let Some(dot) = self.uri.rfind('.'){
+        if let Some(dot) = self.uri.rfind('.') {
             platform_uri.push_str(&self.uri[..=dot]);
             platform_uri.push_str("pc_");
             platform_uri.push_str(&self.uri[dot + 1..]);
             platform_uri
-        }else{
+        } else {
             self.uri.clone()
         }
-        
-        
     }
 
     /// Get the base ResourceID within a derived ResourceID
@@ -193,7 +191,7 @@ impl ResourceID {
     ///     assert_eq!(inner_path.resource_path(), "[[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx](dx11).pc_mate");
     /// #   Ok(())
     /// }
-    /// 
+    ///
     /// ```
     pub fn inner_resource_path(&self) -> ResourceID {
         let open_count = self.uri.chars().filter(|c| *c == '[').count();
@@ -306,7 +304,7 @@ mod tests {
             inner_path.resource_path(),
             "[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].pc_fx"
         );
-        
+
         Ok(())
     }
 

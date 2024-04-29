@@ -1,5 +1,5 @@
-use crate::resource::pdefs::PartitionInfo;
 use crate::resource::partition_manager::PartitionState;
+use crate::resource::pdefs::PartitionInfo;
 use crate::resource::resource_info::ResourceInfo;
 use crate::{utils, GlacierResource, GlacierResourceError, WoaVersion};
 use regex::Regex;
@@ -39,7 +39,6 @@ pub enum ResourcePartitionError {
 
     #[error("Interal resource error: {0}")]
     ResourceError(#[from] GlacierResourceError),
-
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -166,7 +165,11 @@ impl ResourcePartition {
         Ok(())
     }
 
-    fn mount_package(&mut self, package_path: &Path, patch_index: PatchId) -> Result<(), ResourcePartitionError> {
+    fn mount_package(
+        &mut self,
+        package_path: &Path,
+        patch_index: PatchId,
+    ) -> Result<(), ResourcePartitionError> {
         let rpkg = ResourcePackage::from_file(package_path).map_err(|e| {
             ResourcePartitionError::ReadResourcePackageError(
                 e,
@@ -174,7 +177,7 @@ impl ResourcePartition {
                     .file_name()
                     .unwrap_or_default()
                     .to_string_lossy()
-                    .into_owned()
+                    .into_owned(),
             )
         })?;
 

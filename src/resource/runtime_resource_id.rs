@@ -11,7 +11,7 @@ use thiserror::Error;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "serde")]
-use serde_hex::{SerHex,StrictPfx};
+use serde_hex::{SerHex, StrictPfx};
 
 #[derive(Error, Debug)]
 pub enum RuntimeResourceIDError {
@@ -127,8 +127,6 @@ impl fmt::Display for RuntimeResourceID {
         write!(f, "{}", self.to_hex_string())
     }
 }
-
-
 
 // Test section
 #[cfg(test)]

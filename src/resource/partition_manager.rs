@@ -115,10 +115,7 @@ impl PartitionManager {
         }
     }
 
-    pub fn find_partition(
-        &self,
-        partition_id: PartitionId,
-    ) -> Option<&ResourcePartition> {
+    pub fn find_partition(&self, partition_id: PartitionId) -> Option<&ResourcePartition> {
         self.partitions
             .iter()
             .find(|partition| partition.partition_info().id() == partition_id)

@@ -18,11 +18,10 @@ use thiserror::Error;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-
 pub mod encryption;
 pub mod misc;
-pub mod utils;
 pub mod resource;
+pub mod utils;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]

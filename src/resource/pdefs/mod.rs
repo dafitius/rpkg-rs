@@ -61,7 +61,7 @@ pub struct PartitionId {
     index: usize,
 }
 
-impl PartitionId{
+impl PartitionId {
     pub fn part_type(&self) -> PartitionType {
         self.part_type.clone()
     }
@@ -192,7 +192,9 @@ impl PartitionInfo {
     pub fn add_root(&mut self, resource_id: ResourceID) {
         self.roots.push(resource_id);
     }
-    pub fn roots(&self) -> &Vec<ResourceID>{ &self.roots }
+    pub fn roots(&self) -> &Vec<ResourceID> {
+        &self.roots
+    }
 
     pub fn name(&self) -> &Option<String> {
         &self.name

@@ -1,5 +1,3 @@
-
-
 #[cfg(feature = "path-list")]
 use rpkg_rs::misc::hash_path_list::PathList;
 

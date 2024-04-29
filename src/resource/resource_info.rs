@@ -1,6 +1,6 @@
+use super::resource_package::*;
 use crate::resource::runtime_resource_id::RuntimeResourceID;
 use std::fmt;
-use super::resource_package::*;
 
 #[derive(Clone)]
 pub struct ResourceInfo {
