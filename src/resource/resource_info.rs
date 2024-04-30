@@ -17,7 +17,7 @@ impl ResourceInfo {
         &self.entry.runtime_resource_id
     }
 
-    pub fn extension(&self) -> String {
+    pub fn data_type(&self) -> String {
         String::from_utf8_lossy(&self.header.m_type)
             .into_owned()
             .chars()
