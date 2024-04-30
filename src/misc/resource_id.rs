@@ -9,9 +9,13 @@
 //! [[assembly:/images/sprites/player.jpg](asspritesheet).pc_jpeg].pc_png
 //! ```
 
-use crate::runtime::resource::runtime_resource_id::RuntimeResourceID;
+use crate::resource::runtime_resource_id::RuntimeResourceID;
 use regex::Regex;
+use std::str::FromStr;
 use thiserror::Error;
+
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
 
 static CONSOLE_TAG: &str = "pc";
 
@@ -21,15 +25,16 @@ pub enum ResourceIDError {
     InvalidFormat(String),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default, Hash, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ResourceID {
     uri: String,
 }
 
-impl ResourceID {
-    /// Create a ResourceID from a string, checks if the given format is valid, returns [ResourceIDError] otherwise.
-    /// The platform tag is tripped when present
-    pub fn from_string(source: &str) -> Result<Self, ResourceIDError> {
+impl FromStr for ResourceID {
+    type Err = ResourceIDError;
+
+    fn from_str(source: &str) -> Result<Self, Self::Err> {
         let mut uri = source.to_ascii_lowercase();
         uri.retain(|c| c as u8 > 0x1F);
         let rid = Self { uri };
@@ -42,15 +47,24 @@ impl ResourceID {
             uri: rid.uri.replace(format!("{}_", CONSOLE_TAG).as_str(), ""),
         })
     }
+}
+
+impl ResourceID {
+    pub fn new() -> Self {
+        Self::default()
+    }
 
     /// Create a derived ResourceID from a existing one. This nests the original ResourceID
     /// ```
-    ///  use rpkg_rs::misc::resource_id::ResourceID;
-    ///
-    ///  let resource_id = ResourceID::from_string("[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].pc_fx").unwrap();
-    ///  let derived = resource_id.create_derived("dx11", "mate");
-    ///  assert_eq!(derived.get_resource_path(), "[[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx](dx11).pc_mate");
-    ///
+    /// # use std::str::FromStr;
+    /// # use rpkg_rs::misc::resource_id::ResourceID;
+    /// # use rpkg_rs::misc::resource_id::ResourceIDError;
+    /// # fn main() -> Result<(), ResourceIDError>{
+    ///     let resource_id = ResourceID::from_str("[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].pc_fx")?;
+    ///     let derived = resource_id.create_derived("dx11", "mate");
+    ///     assert_eq!(derived.resource_path(), "[[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx](dx11).pc_mate");
+    /// #   Ok(())
+    /// # }
     /// ```
     pub fn create_derived(&self, parameters: &str, extension: &str) -> ResourceID {
         let mut derived = format!("[{}]", self.uri);
@@ -67,15 +81,21 @@ impl ResourceID {
 
     /// Create a ResourceID with aspect parameters
     /// ```
-    ///  use rpkg_rs::misc::resource_id::ResourceID;
+    /// # use std::str::FromStr;
+    /// # use rpkg_rs::misc::resource_id::ResourceID;     
+    /// # use rpkg_rs::misc::resource_id::ResourceIDError;
     ///
-    ///  let resource_id = ResourceID::from_string("[assembly:/templates/aspectdummy.aspect].pc_entitytype").unwrap();
-    ///  let sub_id_1 = ResourceID::from_string("[assembly:/_pro/effects/geometry/water.prim].pc_entitytype").unwrap();
-    ///  let sub_id_2 = ResourceID::from_string("[modules:/zdisablecameracollisionaspect.class].entitytype").unwrap();
+    /// # fn main() -> Result<(), ResourceIDError>{
+    ///  
+    ///     let resource_id = ResourceID::from_str("[assembly:/templates/aspectdummy.aspect].pc_entitytype")?;
+    ///     let sub_id_1 = ResourceID::from_str("[assembly:/_pro/effects/geometry/water.prim].pc_entitytype")?;
+    ///     let sub_id_2 = ResourceID::from_str("[modules:/zdisablecameracollisionaspect.class].entitytype")?;
     ///
-    ///  let aspect = resource_id.create_aspect(vec![&sub_id_1, &sub_id_2]);
+    ///     let aspect = resource_id.create_aspect(vec![&sub_id_1, &sub_id_2]);
     ///
-    /// assert_eq!(aspect.get_resource_path(), "[assembly:/templates/aspectdummy.aspect]([assembly:/_pro/effects/geometry/water.prim].entitytype,[modules:/zdisablecameracollisionaspect.class].entitytype).pc_entitytype");
+    ///     assert_eq!(aspect.resource_path(), "[assembly:/templates/aspectdummy.aspect]([assembly:/_pro/effects/geometry/water.prim].entitytype,[modules:/zdisablecameracollisionaspect.class].entitytype).pc_entitytype");
+    /// #   Ok(())
+    /// # }
     ///
     /// ```
     pub fn create_aspect(&self, ids: Vec<&ResourceID>) -> ResourceID {
@@ -87,7 +107,7 @@ impl ResourceID {
     }
 
     pub fn add_parameter(&mut self, param: &str) {
-        let params = self.get_parameters();
+        let params = self.parameters();
         let new_uri = if params.is_empty() {
             match self.uri.rfind('.') {
                 Some(index) => {
@@ -115,28 +135,32 @@ impl ResourceID {
 
     /// Get the resource path.
     /// Will append the platform tag
-    pub fn get_resource_path(&self) -> String {
+    pub fn resource_path(&self) -> String {
         let mut platform_uri = String::new();
 
-        let dot = self.uri.rfind('.').unwrap();
-        platform_uri.push_str(&self.uri[..=dot]);
-        platform_uri.push_str("pc_");
-        platform_uri.push_str(&self.uri[dot + 1..]);
-
-        platform_uri
+        if let Some(dot) = self.uri.rfind('.') {
+            platform_uri.push_str(&self.uri[..=dot]);
+            platform_uri.push_str("pc_");
+            platform_uri.push_str(&self.uri[dot + 1..]);
+            platform_uri
+        } else {
+            self.uri.clone()
+        }
     }
 
     /// Get the base ResourceID within a derived ResourceID
     /// ```
-    ///  use rpkg_rs::misc::resource_id::ResourceID;
-    ///
-    ///  let resource_id = ResourceID::from_string("[[[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx](dx11).mate](dx12).pc_mate").unwrap();
-    ///
-    ///  let inner_most_path = resource_id.get_inner_most_resource_path();
-    ///
-    /// assert_eq!(inner_most_path.get_resource_path(), "[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].pc_fx");
+    /// # use std::str::FromStr;
+    /// # use rpkg_rs::misc::resource_id::ResourceID;
+    /// # use rpkg_rs::misc::resource_id::ResourceIDError;
+    /// # fn main() -> Result<(), ResourceIDError>{
+    ///     let resource_id = ResourceID::from_str("[[[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx](dx11).mate](dx12).pc_mate")?;
+    ///     let inner_most_path = resource_id.inner_most_resource_path();
+    ///     assert_eq!(inner_most_path.resource_path(), "[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].pc_fx");
+    /// #    Ok(())
+    /// # }
     /// ```
-    pub fn get_inner_most_resource_path(&self) -> ResourceID {
+    pub fn inner_most_resource_path(&self) -> ResourceID {
         let open_count = self.uri.chars().filter(|c| *c == '[').count();
         if open_count == 1 {
             return self.clone();
@@ -148,7 +172,7 @@ impl ResourceID {
             .skip(open_count - 1)
             .collect::<String>();
 
-        match Self::from_string(rid_str.as_str()) {
+        match Self::from_str(rid_str.as_str()) {
             Ok(r) => r,
             Err(_) => self.clone(),
         }
@@ -156,23 +180,29 @@ impl ResourceID {
 
     /// Get the base ResourceID within a derived ResourceID
     /// ```
-    ///  use rpkg_rs::misc::resource_id::ResourceID;
+    /// # use std::str::FromStr;
+    /// # use rpkg_rs::misc::resource_id::ResourceID;
+    /// # use rpkg_rs::misc::resource_id::ResourceIDError;
+    /// # fn main() -> Result<(), ResourceIDError>{
+    ///  
+    ///     let resource_id = ResourceID::from_str("[[[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx](dx11).mate](dx12).pc_mate")?;
+    ///     let inner_path = resource_id.inner_resource_path();
     ///
-    ///  let resource_id = ResourceID::from_string("[[[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx](dx11).mate](dx12).pc_mate").unwrap();
-    ///  let inner_path = resource_id.get_inner_resource_path();
+    ///     assert_eq!(inner_path.resource_path(), "[[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx](dx11).pc_mate");
+    /// #   Ok(())
+    /// }
     ///
-    ///  assert_eq!(inner_path.get_resource_path(), "[[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx](dx11).pc_mate");
     /// ```
-    pub fn get_inner_resource_path(&self) -> ResourceID {
+    pub fn inner_resource_path(&self) -> ResourceID {
         let open_count = self.uri.chars().filter(|c| *c == '[').count();
         if open_count == 1 {
             return self.clone();
         }
 
-        let re = Regex::new(r"\[(.*?)\][^]]*$").unwrap();
+        let re = Regex::new(r"\[(.*?)][^]]*$").unwrap();
         if let Some(captures) = re.captures(&self.uri) {
             if let Some(inner_string) = captures.get(1) {
-                if let Ok(rid) = ResourceID::from_string(inner_string.as_str()) {
+                if let Ok(rid) = ResourceID::from_str(inner_string.as_str()) {
                     return rid;
                 }
             }
@@ -180,7 +210,7 @@ impl ResourceID {
         self.clone()
     }
 
-    pub fn get_protocol(&self) -> Option<String> {
+    pub fn protocol(&self) -> Option<String> {
         match self.uri.find(':') {
             Some(n) => {
                 let protocol: String = self.uri.chars().take(n).collect();
@@ -190,7 +220,7 @@ impl ResourceID {
         }
     }
 
-    pub fn get_parameters(&self) -> Vec<String> {
+    pub fn parameters(&self) -> Vec<String> {
         let re = Regex::new(r"(.*)\((.*)\)\.(.*)").unwrap();
         if let Some(captures) = re.captures(self.uri.as_str()) {
             if let Some(cap) = captures.get(2) {
@@ -204,7 +234,7 @@ impl ResourceID {
         vec![]
     }
 
-    pub fn get_path(&self) -> Option<String> {
+    pub fn path(&self) -> Option<String> {
         let path: String = self.uri.chars().skip(1).collect();
         if let Some(n) = path.rfind('/') {
             let p: String = path.chars().take(n).collect();
@@ -228,8 +258,8 @@ impl ResourceID {
         }
     }
 
-    pub fn to_rrid(&self) -> RuntimeResourceID {
-        RuntimeResourceID::from_resource_id(self)
+    pub fn into_rrid(self) -> RuntimeResourceID {
+        RuntimeResourceID::from_resource_id(&self)
     }
 }
 
@@ -237,67 +267,68 @@ impl ResourceID {
 mod tests {
     use super::*;
     #[test]
-    fn test_parameters() {
-        let mut resource_id = ResourceID::from_string(
+    fn test_parameters() -> Result<(), ResourceIDError> {
+        let mut resource_id = ResourceID::from_str(
             "[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx",
-        )
-        .unwrap();
+        )?;
         resource_id.add_parameter("lmao");
-        assert_eq!(resource_id.get_resource_path(), "[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass](lmao).pc_fx");
-        assert_eq!(resource_id.get_parameters(), ["lmao".to_string()]);
+        assert_eq!(resource_id.resource_path(), "[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass](lmao).pc_fx");
+        assert_eq!(resource_id.parameters(), ["lmao".to_string()]);
 
         resource_id.add_parameter("lmao2");
-        assert_eq!(resource_id.get_resource_path(), "[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass](lmao,lmao2).pc_fx");
+        assert_eq!(resource_id.resource_path(), "[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass](lmao,lmao2).pc_fx");
+        Ok(())
     }
 
     #[test]
-    fn test_get_inner_most_resource_path() {
-        let resource_id = ResourceID::from_string(
+    fn test_get_inner_most_resource_path() -> Result<(), ResourceIDError> {
+        let resource_id = ResourceID::from_str(
             "[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx",
-        )
-        .unwrap();
-        let inner_path = resource_id.get_inner_most_resource_path();
+        )?;
+        let inner_path = resource_id.inner_most_resource_path();
         assert_eq!(
-            inner_path.get_resource_path(),
+            inner_path.resource_path(),
             "[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].pc_fx"
         );
 
-        let resource_id = ResourceID::from_string("[[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx](dx11).mate").unwrap();
-        let inner_path = resource_id.get_inner_most_resource_path();
+        let resource_id = ResourceID::from_str("[[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx](dx11).mate")?;
+        let inner_path = resource_id.inner_most_resource_path();
         assert_eq!(
-            inner_path.get_resource_path(),
+            inner_path.resource_path(),
             "[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].pc_fx"
         );
 
-        let resource_id = ResourceID::from_string("[[[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx](dx11).mate](dx12).pc_mate").unwrap();
-        let inner_path = resource_id.get_inner_most_resource_path();
+        let resource_id = ResourceID::from_str("[[[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx](dx11).mate](dx12).pc_mate")?;
+        let inner_path = resource_id.inner_most_resource_path();
         assert_eq!(
-            inner_path.get_resource_path(),
+            inner_path.resource_path(),
             "[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].pc_fx"
         );
+
+        Ok(())
     }
 
     #[test]
-    fn text_get_inner_resource_path() {
-        let resource_id = ResourceID::from_string(
+    fn text_get_inner_resource_path() -> Result<(), ResourceIDError> {
+        let resource_id = ResourceID::from_str(
             "[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx",
-        )
-        .unwrap();
-        let inner_path = resource_id.get_inner_resource_path();
+        )?;
+        let inner_path = resource_id.inner_resource_path();
         assert_eq!(
-            inner_path.get_resource_path(),
+            inner_path.resource_path(),
             "[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].pc_fx"
         );
 
-        let resource_id = ResourceID::from_string("[[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx](dx11).mate").unwrap();
-        let inner_path = resource_id.get_inner_resource_path();
+        let resource_id = ResourceID::from_str("[[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx](dx11).mate")?;
+        let inner_path = resource_id.inner_resource_path();
         assert_eq!(
-            inner_path.get_resource_path(),
+            inner_path.resource_path(),
             "[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].pc_fx"
         );
 
-        let resource_id = ResourceID::from_string("[[[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx](dx11).mate](dx12).pc_mate").unwrap();
-        let inner_path = resource_id.get_inner_resource_path();
-        assert_eq!(inner_path.get_resource_path(), "[[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx](dx11).pc_mate");
+        let resource_id = ResourceID::from_str("[[[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx](dx11).mate](dx12).pc_mate")?;
+        let inner_path = resource_id.inner_resource_path();
+        assert_eq!(inner_path.resource_path(), "[[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx](dx11).pc_mate");
+        Ok(())
     }
 }

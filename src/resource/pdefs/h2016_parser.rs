@@ -1,9 +1,10 @@
 use crate::encryption::xtea::Xtea;
 use crate::misc::resource_id::ResourceID;
-use crate::runtime::resource::package_defs::{
+use crate::resource::pdefs::{
     PackageDefinitionError, PackageDefinitionParser, PartitionId, PartitionInfo, PartitionType,
 };
 use regex::Regex;
+use std::str::FromStr;
 
 pub struct H2016Parser;
 
@@ -40,7 +41,7 @@ impl PackageDefinitionParser for H2016Parser {
                         };
 
                         partitions.push(PartitionInfo {
-                            name: try_get_partition_name(previous_lines.to_vec()),
+                            name: try_read_partition_name(previous_lines.to_vec()),
                             parent: partitions.iter().map(|p| p.id.clone()).next(),
                             id: PartitionId {
                                 part_type: part_type.clone(),
@@ -49,7 +50,7 @@ impl PackageDefinitionParser for H2016Parser {
                                     .filter(|&p| p.id.part_type == part_type)
                                     .count(),
                             },
-                            patch_level: (m[2]).parse().unwrap(),
+                            patch_level: m[2].parse().unwrap(),
                             roots: vec![],
                         });
                     }
@@ -87,7 +88,7 @@ impl PackageDefinitionParser for H2016Parser {
                     if let Some(m) = resource_path_regex.captures_iter(line).next() {
                         if let Some(current_partition) = partitions.last_mut() {
                             if let Ok(rid) =
-                                ResourceID::from_string(format!("{}.{}", &m[1], &m[2]).as_str())
+                                ResourceID::from_str(format!("{}.{}", &m[1], &m[2]).as_str())
                             {
                                 current_partition.add_root(rid);
                             }
@@ -105,8 +106,8 @@ impl PackageDefinitionParser for H2016Parser {
     }
 }
 
-fn try_get_partition_name(lines: Vec<&str>) -> Option<String> {
-    let reg = Regex::new(r"## --- (?:DLC|Chunk )\d{2,2} (.*)").unwrap();
+fn try_read_partition_name(lines: Vec<&str>) -> Option<String> {
+    let reg = Regex::new(r"## --- (?:DLC|Chunk )\d{2} (.*)").unwrap();
     for line in lines {
         if reg.is_match(line) {
             if let Some(m) = reg.captures_iter(line).next() {

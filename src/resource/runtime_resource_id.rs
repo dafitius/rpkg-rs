@@ -2,12 +2,16 @@
 //! Can be derived from a [ResourceID] md5 digest
 
 use crate::misc::resource_id::ResourceID;
-use binrw::BinRead;
 use md5::{Digest, Md5};
 use std::fmt;
 use std::fmt::{Debug, Formatter};
 use std::hash::Hash;
 use thiserror::Error;
+
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+#[cfg(feature = "serde")]
+use serde_hex::{SerHex, StrictPfx};
 
 #[derive(Error, Debug)]
 pub enum RuntimeResourceIDError {
@@ -19,8 +23,10 @@ pub enum RuntimeResourceIDError {
 }
 
 /// Represents a runtime resource identifier.
-#[derive(BinRead, Default, PartialEq, Eq, Hash, Clone, Copy)]
+#[derive(Default, PartialEq, Eq, Hash, Clone, Copy)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct RuntimeResourceID {
+    #[cfg_attr(feature = "serde", serde(with = "SerHex::<StrictPfx>"))]
     id: u64,
 }
 
@@ -67,7 +73,7 @@ impl RuntimeResourceID {
 
     /// Create RuntimeResourceID from ResourceID
     pub fn from_resource_id(rid: &ResourceID) -> Self {
-        let digest = Md5::digest(rid.get_resource_path());
+        let digest = Md5::digest(rid.resource_path());
         let mut hash = 0u64;
         for i in 1..8 {
             hash |= u64::from(digest[i]) << (8 * (7 - i));
@@ -117,7 +123,7 @@ impl Debug for RuntimeResourceID {
 }
 
 impl fmt::Display for RuntimeResourceID {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         write!(f, "{}", self.to_hex_string())
     }
 }
@@ -125,6 +131,7 @@ impl fmt::Display for RuntimeResourceID {
 // Test section
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
     // Import the test module
     use super::*;
 
@@ -148,8 +155,7 @@ mod tests {
             0x00123456789ABCDE
         );
 
-        let rid =
-            ResourceID::from_string("[assembly:/_test/lib.a?/test_image.png].pc_webp").unwrap();
+        let rid = ResourceID::from_str("[assembly:/_test/lib.a?/test_image.png].pc_webp").unwrap();
         assert_eq!(
             RuntimeResourceID::from_resource_id(&rid),
             0x00290D5B143172A3

@@ -1,9 +1,10 @@
 use rpkg_rs::misc::resource_id::ResourceID;
-use rpkg_rs::runtime::resource::package_defs::PartitionInfo;
-use rpkg_rs::runtime::resource::resource_partition::ResourcePartition;
-use rpkg_rs::runtime::resource::runtime_resource_id::RuntimeResourceID;
+use rpkg_rs::resource::pdefs::PartitionInfo;
+use rpkg_rs::resource::resource_partition::ResourcePartition;
+use rpkg_rs::resource::runtime_resource_id::RuntimeResourceID;
 use std::env;
 use std::path::PathBuf;
+use std::str::FromStr;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -15,7 +16,7 @@ fn main() {
 
     //set the args
     let runtime_path = PathBuf::from(&args[1]);
-    let rid = ResourceID::from_string(&args[3]).unwrap_or_else(|_| {
+    let rid = ResourceID::from_str(&args[3]).unwrap_or_else(|_| {
         println!("Given ResourceID is invalid");
         std::process::exit(0)
     });
@@ -28,7 +29,7 @@ fn main() {
     });
 
     let mut partition = ResourcePartition::new(partition_info);
-    print!("Mounting partition {} ", &partition.get_partition_info().id);
+    print!("Mounting partition {} ", &partition.partition_info().id());
 
     partition
         .mount_resource_packages_in_partition(&runtime_path)
@@ -38,7 +39,7 @@ fn main() {
         });
 
     println!("Extracting the resource");
-    let file = partition.get_resource(&rrid).unwrap_or_else(|e| {
+    let file = partition.read_resource(&rrid).unwrap_or_else(|e| {
         println!("Failed extract resource: {:?}", e);
         std::process::exit(0)
     });

@@ -2,7 +2,7 @@ use std::ffi::OsString;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
-pub fn get_file_names(path: &Path) -> Vec<OsString> {
+pub fn read_file_names(path: &Path) -> Vec<OsString> {
     match fs::read_dir(path) {
         Ok(entries) => entries
             .flatten()

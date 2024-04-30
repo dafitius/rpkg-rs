@@ -3,6 +3,7 @@ name = "rpkg-rs"
 version = "0.1.5"
 edition = "2021"
 license = "Apache-2.0"
+categories = ["game-development", "data-structures", "parser-implementations"]
 description = "Parse Glacier ResourcePackage (rpkg) files, allowing access to the resources stored within."
 repository = "https://github.com/dafitius/rpkg-rs"
 readme = "README.md"
@@ -14,17 +15,24 @@ status = "actively-developed"
 binrw = "0.13.3"
 modular-bitfield = "0.11.2"
 memmap2 = "0.9.4"
-rayon = "1.10.0"
 regex = "1.10.4"
 lz4 = "1.24.0"
 pathdiff = "0.2.1"
-
 itertools = { version = "0.12.1", features = [] }
 thiserror = "1.0.59"
 md-5 = "0.10.6"
 extended-tea = "0.1.1"
 byteorder = "1.5.0"
+rayon = { version = "1.10.0", optional = true}
+serde = { version = "1.0.199", optional = true, features = ["derive"] }
+serde-hex = { version = "0.1.0", optional = true }
+
+[features]
+default = ["path-list", "serde"]
+path-list = ["dep:rayon"]
+serde = ["dep:serde", "dep:serde-hex"]
 
 [dev-dependencies]
+serde_json = "1.0.116"
 version-sync = "0.9.5"
 

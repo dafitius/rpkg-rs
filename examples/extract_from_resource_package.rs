@@ -1,8 +1,9 @@
 use rpkg_rs::misc::resource_id::ResourceID;
-use rpkg_rs::runtime::resource::resource_package::ResourcePackage;
-use rpkg_rs::runtime::resource::runtime_resource_id::RuntimeResourceID;
+use rpkg_rs::resource::resource_package::ResourcePackage;
+use rpkg_rs::resource::runtime_resource_id::RuntimeResourceID;
 use std::env;
 use std::path::PathBuf;
+use std::str::FromStr;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -14,7 +15,7 @@ fn main() {
 
     //set the args
     let package_path = PathBuf::from(&args[1]);
-    let rid = ResourceID::from_string(&args[2]).unwrap_or_else(|_| {
+    let rid = ResourceID::from_str(&args[2]).unwrap_or_else(|_| {
         println!("Given ResourceID is invalid");
         std::process::exit(0)
     });
@@ -28,10 +29,12 @@ fn main() {
     });
 
     println!("Extracting the resource");
-    let file = rpkg.get_resource(&package_path, &rrid).unwrap_or_else(|e| {
-        println!("Failed extract resource: {}", e);
-        std::process::exit(0)
-    });
+    let file = rpkg
+        .read_resource(&package_path, &rrid)
+        .unwrap_or_else(|e| {
+            println!("Failed extract resource: {}", e);
+            std::process::exit(0)
+        });
 
     println!("Resource extracted!");
     match std::str::from_utf8(&*file) {

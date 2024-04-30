@@ -1,5 +1,5 @@
-use crate::runtime::resource::resource_info::ResourceInfo;
-use crate::runtime::resource::resource_package::ReferenceType::{INSTALL, NORMAL, WEAK};
+use crate::resource::resource_info::ResourceInfo;
+use crate::resource::resource_package::ReferenceType::{INSTALL, NORMAL, WEAK};
 use binrw::{parser, BinRead, BinReaderExt, BinResult};
 use itertools::Itertools;
 use lz4::block::decompress_to_buffer;
@@ -13,7 +13,7 @@ use std::path::Path;
 use std::{fmt, io};
 use thiserror::Error;
 
-use crate::runtime::resource::runtime_resource_id::RuntimeResourceID;
+use crate::resource::runtime_resource_id::RuntimeResourceID;
 
 #[derive(Debug, Error)]
 pub enum ResourcePackageError {
@@ -42,7 +42,12 @@ pub struct ResourcePackage {
     unneeded_resource_count: u32,
 
     #[br(if(is_patch))]
-    #[br(little, count = unneeded_resource_count)]
+    #[br(little, count = unneeded_resource_count, map = |ids: Vec<u64>| {
+    match unneeded_resource_count{
+        0 => None,
+        _ => Some(ids.into_iter().map(RuntimeResourceID::from).collect::<Vec<_>>()),
+    }
+    })]
     unneeded_resources: Option<Vec<RuntimeResourceID>>,
 
     #[br(parse_with = resource_parser, args(header.file_count))]
@@ -54,7 +59,11 @@ fn resource_parser(file_count: u32) -> BinResult<HashMap<RuntimeResourceID, Reso
     let mut map = HashMap::new();
     let mut resource_entries = vec![];
     for _ in 0..file_count {
-        resource_entries.push(PackageOffsetInfo::read_options(reader, endian, ())?);
+        resource_entries.push(PackageOffsetInfo {
+            runtime_resource_id: u64::read_options(reader, endian, ())?.into(),
+            data_offset: u64::read_options(reader, endian, ())?,
+            compressed_size_and_is_scrambled_flag: u32::read_options(reader, endian, ())?,
+        });
     }
 
     let mut resource_metadata = vec![];
@@ -89,7 +98,7 @@ impl ResourcePackage {
             .map_err(ResourcePackageError::ParsingError)
     }
 
-    pub fn get_magic(&self) -> String {
+    pub fn magic(&self) -> String {
         String::from_utf8_lossy(&self.magic)
             .into_owned()
             .chars()
@@ -97,15 +106,15 @@ impl ResourcePackage {
             .collect()
     }
 
-    pub fn get_metadata(&self) -> &Option<PackageMetadata> {
+    pub fn metadata(&self) -> &Option<PackageMetadata> {
         &self.metadata
     }
 
-    pub fn get_header(&self) -> &PackageHeader {
+    pub fn header(&self) -> &PackageHeader {
         &self.header
     }
 
-    pub fn get_unneeded_resources(&self) -> Vec<RuntimeResourceID> {
+    pub fn unneeded_resources(&self) -> Vec<RuntimeResourceID> {
         match &self.unneeded_resources {
             None => {
                 vec![]
@@ -114,7 +123,7 @@ impl ResourcePackage {
         }
     }
 
-    pub fn get_resource_info(&self, rrid: &RuntimeResourceID) -> Option<&ResourceInfo> {
+    pub fn resource_info(&self, rrid: &RuntimeResourceID) -> Option<&ResourceInfo> {
         self.resources.get(rrid)
     }
 
@@ -130,7 +139,7 @@ impl ResourcePackage {
         }
     }
 
-    pub fn get_resource(
+    pub fn read_resource(
         &self,
         package_path: &Path,
         rrid: &RuntimeResourceID,
@@ -140,11 +149,11 @@ impl ResourcePackage {
             .get(rrid)
             .ok_or(ResourcePackageError::ResourceNotFound)?;
         let final_size = resource
-            .get_compressed_size()
+            .compressed_size()
             .unwrap_or(resource.header.data_size as usize);
 
-        let is_lz4ed = resource.get_is_compressed();
-        let is_scrambled = resource.get_is_scrambled();
+        let is_lz4ed = resource.is_compressed();
+        let is_scrambled = resource.is_scrambled();
 
         // Extract the resource bytes from the resourcePackage
         let mut file = File::open(package_path).map_err(ResourcePackageError::IoError)?;
@@ -176,11 +185,11 @@ impl ResourcePackage {
         Ok(buffer)
     }
 
-    pub fn get_resource_ids(&self) -> &HashMap<RuntimeResourceID, ResourceInfo> {
+    pub fn resource_ids(&self) -> &HashMap<RuntimeResourceID, ResourceInfo> {
         &self.resources
     }
 
-    pub fn get_unneeded_resource_ids(&self) -> Vec<&RuntimeResourceID> {
+    pub fn unneeded_resource_ids(&self) -> Vec<&RuntimeResourceID> {
         match &self.unneeded_resources {
             None => {
                 vec![]
@@ -209,7 +218,7 @@ pub struct PackageHeader {
 }
 
 #[allow(dead_code)]
-#[derive(BinRead)]
+#[derive(Copy, Clone)]
 pub struct PackageOffsetInfo {
     pub(crate) runtime_resource_id: RuntimeResourceID,
     pub(crate) data_offset: u64,
@@ -217,11 +226,11 @@ pub struct PackageOffsetInfo {
 }
 
 impl PackageOffsetInfo {
-    pub fn get_is_scrambled(&self) -> bool {
+    pub fn is_scrambled(&self) -> bool {
         self.compressed_size_and_is_scrambled_flag & 0x80000000 == 0x80000000
     }
 
-    pub fn get_compressed_size(&self) -> Option<usize> {
+    pub fn compressed_size(&self) -> Option<usize> {
         match (self.compressed_size_and_is_scrambled_flag & 0x7FFFFFFF) as usize {
             0 => None,
             n => Some(n),
@@ -230,30 +239,29 @@ impl PackageOffsetInfo {
 }
 
 #[allow(dead_code)]
-#[derive(BinRead)]
+#[derive(BinRead, Clone, PartialEq, Eq)]
 pub struct ResourceHeader {
-    pub m_type: [u8; 4],
+    pub(crate) m_type: [u8; 4],
     references_chunk_size: u32,
     states_chunk_size: u32,
-    pub data_size: u32,
-    pub system_memory_requirement: u32,
-    pub video_memory_requirement: u32,
+    pub(crate) data_size: u32,
+    pub(crate) system_memory_requirement: u32,
+    pub(crate) video_memory_requirement: u32,
 
     #[br(if (references_chunk_size > 0), parse_with = read_references)]
     pub references: Vec<(RuntimeResourceID, ResourceReferenceFlags)>,
 }
 
+#[derive(Copy, Clone, Eq, PartialEq)]
 pub enum ResourceReferenceFlags {
     Legacy(u8),
     Standard(u8),
 }
 
 impl ResourceReferenceFlags {
-    pub fn get_language_code(&self) -> u8 {
+    pub fn language_code(&self) -> u8 {
         match self {
-            ResourceReferenceFlags::Legacy(b) => {
-                convert_old_flags_to_new_type(b).get_language_code()
-            }
+            ResourceReferenceFlags::Legacy(b) => convert_old_flags_to_new_type(b).language_code(),
             ResourceReferenceFlags::Standard(b) => b & 0b0001_1111,
         }
     }
@@ -265,9 +273,9 @@ impl ResourceReferenceFlags {
         }
     }
 
-    pub fn get_type(&self) -> ReferenceType {
+    pub fn reference_type(&self) -> ReferenceType {
         match self {
-            ResourceReferenceFlags::Legacy(b) => convert_old_flags_to_new_type(b).get_type(),
+            ResourceReferenceFlags::Legacy(b) => convert_old_flags_to_new_type(b).reference_type(),
             ResourceReferenceFlags::Standard(b) => match b & 0b1100_0000 {
                 0 => INSTALL,
                 1 => NORMAL,
@@ -316,12 +324,14 @@ fn read_references() -> BinResult<Vec<(RuntimeResourceID, ResourceReferenceFlags
             .map_ok(ResourceReferenceFlags::Standard)
             .collect::<BinResult<Vec<_>>>()?;
         let rrids: Vec<RuntimeResourceID> = (0..reference_count)
-            .map(|_| RuntimeResourceID::read_le(reader))
+            .map(|_| u64::read_le(reader))
+            .map_ok(RuntimeResourceID::from)
             .collect::<BinResult<Vec<_>>>()?;
         (rrids, flags)
     } else {
         let rrids: Vec<RuntimeResourceID> = (0..reference_count)
-            .map(|_| RuntimeResourceID::read_le(reader))
+            .map(|_| u64::read_le(reader))
+            .map_ok(RuntimeResourceID::from)
             .collect::<BinResult<Vec<_>>>()?;
         let flags: Vec<ResourceReferenceFlags> = (0..reference_count)
             .map(|_| u8::read_le(reader))

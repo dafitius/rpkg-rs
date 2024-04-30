@@ -1,10 +1,11 @@
 use rpkg_rs::misc::ini_file_system::IniFileSystem;
 use rpkg_rs::misc::resource_id::ResourceID;
-use rpkg_rs::runtime::resource::package_defs::PackageDefinitionSource;
-use rpkg_rs::runtime::resource::partition_manager::{PartitionManager, PartitionState};
-use rpkg_rs::runtime::resource::runtime_resource_id::RuntimeResourceID;
+use rpkg_rs::resource::partition_manager::{PartitionManager, PartitionState};
+use rpkg_rs::resource::pdefs::PackageDefinitionSource;
+use rpkg_rs::resource::runtime_resource_id::RuntimeResourceID;
 use std::io::{stdin, Write};
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::{env, io};
 
 fn main() {
@@ -23,11 +24,11 @@ fn main() {
         std::process::exit(1);
     });
 
-    let app_options = &thumbs.get_root()["application"];
+    let app_options = &thumbs.root()["application"];
 
     if let (Some(proj_path), Some(relative_runtime_path)) = (
-        app_options.get_option("PROJECT_PATH"),
-        app_options.get_option("RUNTIME_PATH"),
+        app_options.options().get("PROJECT_PATH"),
+        app_options.options().get("RUNTIME_PATH"),
     ) {
         let runtime_path = PathBuf::from(format!(
             "{}\\{proj_path}\\{relative_runtime_path}",
@@ -79,7 +80,7 @@ fn main() {
 
         //ignore modded patches
         for partition in package_defs.iter_mut() {
-            partition.patch_level = 9
+            partition.set_max_patch_level(9);
         }
 
         package_manager
@@ -102,7 +103,7 @@ fn main() {
                 .ok()
                 .expect("Failed to read line");
 
-            let rid = ResourceID::from_string(input_string.as_str()).unwrap_or_else(|_| {
+            let rid = ResourceID::from_str(input_string.as_str()).unwrap_or_else(|_| {
                 println!("Given ResourceID is invalid");
                 std::process::exit(0)
             });

@@ -1,21 +1,20 @@
-// runtime/resource/partition_parsing/mod.rs
-
 pub mod h2016_parser;
 pub mod hm2_parser;
 pub mod hm3_parser;
 
-use crate::runtime::resource::resource_partition::PatchId;
+use crate::resource::resource_partition::PatchId;
 use regex::Regex;
 use std::fmt::Display;
 use std::str::FromStr;
 use thiserror::Error;
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 use crate::encryption::xtea::XteaError;
 use crate::misc::resource_id::ResourceID;
-use crate::runtime::resource::package_defs::PackageDefinitionSource::{HM2, HM2016, HM3};
-use crate::runtime::resource::package_defs::PartitionType::{
-    Dlc, LanguageDlc, LanguageStandard, Standard,
-};
+use crate::resource::pdefs::PackageDefinitionSource::{HM2, HM2016, HM3};
+use crate::resource::pdefs::PartitionType::{Dlc, LanguageDlc, LanguageStandard, Standard};
 use crate::WoaVersion;
 
 #[derive(Debug, Error)]
@@ -46,6 +45,7 @@ pub enum PartitionInfoError {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum PartitionType {
     Standard,
     Addon,
@@ -55,9 +55,19 @@ pub enum PartitionType {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct PartitionId {
-    pub part_type: PartitionType,
-    pub index: usize,
+    part_type: PartitionType,
+    index: usize,
+}
+
+impl PartitionId {
+    pub fn part_type(&self) -> PartitionType {
+        self.part_type.clone()
+    }
+    pub fn index(&self) -> usize {
+        self.index
+    }
 }
 
 impl FromStr for PartitionId {
@@ -140,18 +150,19 @@ impl Display for PartitionId {
 
 /// Represents information about a resource partition.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct PartitionInfo {
     /// The name of the partition, if available.
-    pub name: Option<String>,
+    name: Option<String>,
     /// The parent partition's identifier, if any.
-    pub parent: Option<PartitionId>,
+    parent: Option<PartitionId>,
     /// The identifier of the partition.
     /// Example: "chunk9", "dlc12" or "dlc5langjp"
-    pub id: PartitionId,
+    id: PartitionId,
     /// The patch level of the partition. Note: This is used an an upper bound, any patch above this level will be ignored.
-    pub patch_level: usize,
+    patch_level: usize,
     /// The list of resource IDs associated with this partition.
-    pub roots: Vec<ResourceID>,
+    roots: Vec<ResourceID>,
 }
 
 impl PartitionInfo {
@@ -165,7 +176,7 @@ impl PartitionInfo {
         })
     }
 
-    pub fn get_filename(&self, patch_index: &PatchId) -> String {
+    pub fn filename(&self, patch_index: PatchId) -> String {
         match patch_index {
             PatchId::Base => {
                 let base = self.id.to_string();
@@ -180,6 +191,26 @@ impl PartitionInfo {
 
     pub fn add_root(&mut self, resource_id: ResourceID) {
         self.roots.push(resource_id);
+    }
+    pub fn roots(&self) -> &Vec<ResourceID> {
+        &self.roots
+    }
+
+    pub fn name(&self) -> &Option<String> {
+        &self.name
+    }
+    pub fn parent(&self) -> &Option<PartitionId> {
+        &self.parent
+    }
+    pub fn id(&self) -> PartitionId {
+        self.id.clone()
+    }
+    pub fn max_patch_level(&self) -> usize {
+        self.patch_level
+    }
+
+    pub fn set_max_patch_level(&mut self, patch_level: usize) {
+        self.patch_level = patch_level
     }
 }
 

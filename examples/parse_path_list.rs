@@ -1,9 +1,12 @@
+#[cfg(feature = "path-list")]
 use rpkg_rs::misc::hash_path_list::PathList;
-use rpkg_rs::runtime::resource::runtime_resource_id::RuntimeResourceID;
+
+use rpkg_rs::resource::runtime_resource_id::RuntimeResourceID;
 use std::io::{stdin, Write};
 use std::path::Path;
 use std::{env, io};
 
+#[cfg(feature = "path-list")]
 fn main() {
     let args: Vec<String> = env::args().collect();
 
@@ -31,7 +34,7 @@ fn main() {
             .expect("Failed to read line");
 
         if let Ok(rrid) = RuntimeResourceID::from_hex_string(input_string.as_str().trim_end()) {
-            println!("{:?}", path_list.get_resource_id(&rrid));
+            println!("{:?}", path_list.get(&rrid));
         } else {
             println!("Failed to interpret the input")
         }

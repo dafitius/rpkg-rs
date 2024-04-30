@@ -1,7 +1,7 @@
-use std::io::{Cursor};
-use extended_tea::{XTEA};
-use thiserror::Error;
 use crate::encryption::xtea::XteaError::InvalidInput;
+use extended_tea::XTEA;
+use std::io::Cursor;
+use thiserror::Error;
 
 /// Errors that can occur during XTEA encryption or decryption.
 #[derive(Debug, Error)]
@@ -20,7 +20,6 @@ pub enum XteaError {
 pub struct Xtea;
 
 impl Xtea {
-
     /// Default XTEA key, used in thumbs.dat and packagedefinition.txt
     pub const DEFAULT_KEY: [u32; 4] = [0x30f95282, 0x1f48c419, 0x295f8548, 0x2a78366d];
 
@@ -40,8 +39,7 @@ impl Xtea {
     }
 
     /// Decrypts a text file given its buffer, uses the default xtea key.
-    pub fn decrypt_text_file(input_buffer: &[u8]) -> Result<String, XteaError>{
-
+    pub fn decrypt_text_file(input_buffer: &[u8]) -> Result<String, XteaError> {
         let payload_start = Self::DEFAULT_ENCRYPTED_HEADER.len() + 4;
 
         if input_buffer.len() < payload_start {
@@ -54,8 +52,10 @@ impl Xtea {
 
         let input = &input_buffer[payload_start..];
 
-        if input.len() % 8 != 0{
-            return Err(InvalidInput("Input must be of a length divisible by 8".to_string()))
+        if input.len() % 8 != 0 {
+            return Err(InvalidInput(
+                "Input must be of a length divisible by 8".to_string(),
+            ));
         }
 
         let xtea = XTEA::new(&Self::DEFAULT_KEY);
@@ -64,21 +64,20 @@ impl Xtea {
         let mut input_reader = Cursor::new(input);
         let mut ouput_writer = Cursor::new(&mut out_buffer);
 
-        xtea.decipher_stream::<byteorder::LittleEndian, _, _>(
-            &mut input_reader,
-            &mut ouput_writer,
-        ).map_err(XteaError::CipherError)?;
+        xtea.decipher_stream::<byteorder::LittleEndian, _, _>(&mut input_reader, &mut ouput_writer)
+            .map_err(XteaError::CipherError)?;
 
         String::from_utf8(ouput_writer.get_mut().to_owned()).map_err(XteaError::TextEncodingError)
     }
 
     /// Decrypts a string given its buffer and key.
-    pub fn decrypt_string(input_buffer: Vec<u8>, key: &[u32; 4]) -> Result<String, XteaError>{
-
+    pub fn decrypt_string(input_buffer: Vec<u8>, key: &[u32; 4]) -> Result<String, XteaError> {
         let input = &input_buffer;
 
-        if input.len() % 8 != 0{
-            return Err(InvalidInput("Input must be of a length divisible by 8".to_string()))
+        if input.len() % 8 != 0 {
+            return Err(InvalidInput(
+                "Input must be of a length divisible by 8".to_string(),
+            ));
         }
 
         let xtea = XTEA::new(key);
@@ -87,10 +86,8 @@ impl Xtea {
         let mut input_reader = Cursor::new(input);
         let mut ouput_writer = Cursor::new(&mut out_buffer);
 
-        xtea.decipher_stream::<byteorder::LittleEndian, _, _>(
-            &mut input_reader,
-            &mut ouput_writer,
-        ).map_err(XteaError::CipherError)?;
+        xtea.decipher_stream::<byteorder::LittleEndian, _, _>(&mut input_reader, &mut ouput_writer)
+            .map_err(XteaError::CipherError)?;
 
         String::from_utf8(ouput_writer.get_mut().to_owned()).map_err(XteaError::TextEncodingError)
     }
@@ -102,5 +99,4 @@ impl Xtea {
     // fn encrypt_string(input_string: String, key: &[u32; 4]) {
     //     todo!()
     // }
-
 }
