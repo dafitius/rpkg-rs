@@ -3,6 +3,7 @@ name = "rpkg-rs"
 version = "0.1.5"
 edition = "2021"
 license = "Apache-2.0"
+categories = ["game-development", "data-structures", "parser-implementations"]
 description = "Parse Glacier ResourcePackage (rpkg) files, allowing access to the resources stored within."
 repository = "https://github.com/dafitius/rpkg-rs"
 readme = "README.md"
