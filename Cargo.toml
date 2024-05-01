@@ -1,6 +1,6 @@
 [package]
 name = "rpkg-rs"
-version = "0.1.5"
+version = "1.0.0-rc.1"
 edition = "2021"
 license = "Apache-2.0"
 categories = ["game-development", "data-structures", "parser-implementations"]

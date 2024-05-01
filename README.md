@@ -10,8 +10,6 @@
 `rpkg-rs` provides functionality for interacting with `ResourcePackage` (rpkg) files found within Hitman games. 
 This crate facilitates parsing of these files, enabling seamless access to the contained resource files. By parsing configuration files such as `thumbs.ini` and `packagedefintion.txt`, `rpkg-rs` offers extensive support for reading and manipulating these packages.
 
-**Note:** This project is currently in alpha stage. Expect changes to the API.
-
 ## Features
 
 - Parse ResourcePackage (rpkg) files, allowing access to the resources stored within.
@@ -27,8 +25,12 @@ This crate facilitates parsing of these files, enabling seamless access to the c
 - PackageDefinitions (packagedefinition.txt) from Hitman 2016, Hitman 2, and Hitman 3, with API support for adding custom parsers.
 
 
-`rpkg-rs` aims to streamline the process of working with Hitman game resources, offering a robust set of features to read ResourcePackage files.
+## Future Plans
 
+- **Alpha Format Support:** Extend `ResourcePackge` support for the older alpha format, enabling extraction of alpha resources.
+- **RPKG File Generation:** Integration of support for generating rpkg files, allowing users to efficiently create and manage their resource packages within the `rpkg-rs` crate.
+
+These upcoming features are designed to further solidify `rpkg-rs` as a comprehensive solution for interacting with Glacier game files.
 
 ## Contributions
 Bug reports, PRs and feature requests are welcome.
