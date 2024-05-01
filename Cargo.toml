@@ -15,7 +15,7 @@ status = "actively-developed"
 binrw = "0.13.3"
 modular-bitfield = "0.11.2"
 memmap2 = "0.9.4"
-regex = "1.10.4"
+lazy-regex = "3.1.0"
 lz4 = "1.24.0"
 pathdiff = "0.2.1"
 itertools = { version = "0.12.1", features = [] }

@@ -10,8 +10,8 @@
 //! ```
 
 use crate::resource::runtime_resource_id::RuntimeResourceID;
-use regex::Regex;
 use std::str::FromStr;
+use lazy_regex::regex;
 use thiserror::Error;
 
 #[cfg(feature = "serde")]
@@ -199,7 +199,7 @@ impl ResourceID {
             return self.clone();
         }
 
-        let re = Regex::new(r"\[(.*?)][^]]*$").unwrap();
+        let re = regex!(r"\[(.*?)][^]]*$");
         if let Some(captures) = re.captures(&self.uri) {
             if let Some(inner_string) = captures.get(1) {
                 if let Ok(rid) = ResourceID::from_str(inner_string.as_str()) {
@@ -221,7 +221,7 @@ impl ResourceID {
     }
 
     pub fn parameters(&self) -> Vec<String> {
-        let re = Regex::new(r"(.*)\((.*)\)\.(.*)").unwrap();
+        let re = regex!(r"(.*)\((.*)\)\.(.*)");
         if let Some(captures) = re.captures(self.uri.as_str()) {
             if let Some(cap) = captures.get(2) {
                 return cap

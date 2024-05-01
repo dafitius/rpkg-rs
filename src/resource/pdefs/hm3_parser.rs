@@ -3,8 +3,8 @@ use crate::misc::resource_id::ResourceID;
 use crate::resource::pdefs::{
     PackageDefinitionError, PackageDefinitionParser, PartitionId, PartitionInfo, PartitionType,
 };
-use regex::Regex;
 use std::str::FromStr;
+use lazy_regex::regex;
 
 pub struct HM3Parser;
 
@@ -22,8 +22,8 @@ impl PackageDefinitionParser for HM3Parser {
 
         //define the regex
         let partition_regex =
-            Regex::new(r"@partition name=(.+?) parent=(.+?) type=(.+?) patchlevel=(.\d*)").unwrap();
-        let resource_path_regex = Regex::new(r"(\[[a-z]+:/.+?]).([a-z]+)").unwrap();
+            regex!(r"@partition name=(.+?) parent=(.+?) type=(.+?) patchlevel=(.\d*)");
+        let resource_path_regex = regex!(r"(\[[a-z]+:/.+?]).([a-z]+)");
 
         //try to match the regex on a per-line basis
         for line in deciphered_data.lines() {

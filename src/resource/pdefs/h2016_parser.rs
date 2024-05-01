@@ -3,8 +3,8 @@ use crate::misc::resource_id::ResourceID;
 use crate::resource::pdefs::{
     PackageDefinitionError, PackageDefinitionParser, PartitionId, PartitionInfo, PartitionType,
 };
-use regex::Regex;
 use std::str::FromStr;
+use lazy_regex::regex;
 
 pub struct H2016Parser;
 
@@ -21,11 +21,11 @@ impl PackageDefinitionParser for H2016Parser {
         let mut partitions: Vec<PartitionInfo> = Vec::new();
         let mut previous_lines: [&str; 2] = ["", ""];
 
-        let partition_regex = Regex::new(r"#([A-z]+) patchlevel=([0-9]+)").unwrap();
+        let partition_regex = regex!(r"#([A-z]+) patchlevel=([0-9]+)");
 
-        let langdlc_regex = Regex::new(r"#langdlc ([A-z]+)").unwrap();
+        let langdlc_regex = regex!(r"#langdlc ([A-z]+)");
 
-        let resource_path_regex = Regex::new(r"(\[[a-z]+:/.+?]).([a-z]+)").unwrap();
+        let resource_path_regex = regex!(r"(\[[a-z]+:/.+?]).([a-z]+)");
 
         for line in deciphered_data.lines() {
             let trimmed_line = line.trim();
@@ -107,7 +107,7 @@ impl PackageDefinitionParser for H2016Parser {
 }
 
 fn try_read_partition_name(lines: Vec<&str>) -> Option<String> {
-    let reg = Regex::new(r"## --- (?:DLC|Chunk )\d{2} (.*)").unwrap();
+    let reg = regex!(r"## --- (?:DLC|Chunk )\d{2} (.*)");
     for line in lines {
         if reg.is_match(line) {
             if let Some(m) = reg.captures_iter(line).next() {

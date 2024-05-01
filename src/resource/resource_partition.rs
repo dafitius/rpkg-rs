@@ -2,7 +2,7 @@ use crate::resource::partition_manager::PartitionState;
 use crate::resource::pdefs::PartitionInfo;
 use crate::resource::resource_info::ResourceInfo;
 use crate::{utils, GlacierResource, GlacierResourceError, WoaVersion};
-use regex::Regex;
+use lazy_regex::regex::Regex;
 use std::cmp::Ordering;
 use std::fmt::Debug;
 use std::path::PathBuf;
@@ -182,7 +182,7 @@ impl ResourcePartition {
         })?;
 
         //remove the deletions if there are any
-        for deletion in rpkg.unneeded_resource_ids().iter() {
+        for deletion in rpkg.unneeded_resource_ids() {
             if self.resources.contains_key(deletion) {
                 self.resources.remove_entry(deletion);
             }

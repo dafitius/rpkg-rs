@@ -2,8 +2,8 @@ pub mod h2016_parser;
 pub mod hm2_parser;
 pub mod hm3_parser;
 
+use lazy_regex::regex;
 use crate::resource::resource_partition::PatchId;
-use regex::Regex;
 use std::fmt::Display;
 use std::str::FromStr;
 use thiserror::Error;
@@ -74,8 +74,7 @@ impl FromStr for PartitionId {
     type Err = PartitionIdError;
 
     fn from_str(id: &str) -> Result<Self, Self::Err> {
-        let regex = Regex::new("^(chunk|dlc)(\\d+)(\\p{L}*)(?:patch\\d+)?$")
-            .map_err(PartitionIdError::RegexError)?;
+        let regex = regex!("^(chunk|dlc)(\\d+)(\\p{L}*)(?:patch\\d+)?$");
         if regex.is_match(id) {
             let matches = regex
                 .captures(id)
