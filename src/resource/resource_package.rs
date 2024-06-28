@@ -1,6 +1,6 @@
 use crate::resource::resource_info::ResourceInfo;
 use crate::resource::resource_package::ReferenceType::{INSTALL, NORMAL, WEAK};
-use binrw::{parser, BinRead, BinReaderExt, BinResult, binrw};
+use binrw::{parser, BinRead, BinReaderExt, BinResult, binrw, BinWrite};
 use itertools::Itertools;
 use lz4::block::decompress_to_buffer;
 use memmap2::Mmap;
@@ -28,30 +28,32 @@ pub enum ResourcePackageError {
 }
 
 #[allow(dead_code)]
-#[derive(BinRead)]
-#[br(import(is_patch: bool))]
+#[binrw]
+#[brw(little, import(is_patch: bool))]
 pub struct ResourcePackage {
-    magic: [u8; 4],
+    pub magic: [u8; 4],
 
-    #[br(if (magic == * b"2KPR"))]
-    metadata: Option<PackageMetadata>,
+    #[br(if (magic == *b"2KPR"))]
+    #[bw(if (magic == b"2KPR"))]
+    pub metadata: Option<PackageMetadata>,
 
-    header: PackageHeader,
+    pub header: PackageHeader,
 
-    #[br(if (is_patch && header.table_offset != 0 && metadata.as_ref().map_or(true, | m | m.patch_id > 0)))]
-    unneeded_resource_count: u32,
+    #[brw(if (is_patch))]
+    pub unneeded_resource_count: u32,
 
-    #[br(if(is_patch))]
-    #[br(little, count = unneeded_resource_count, map = |ids: Vec<u64>| {
+    #[brw(if (is_patch))]
+    #[br(count = unneeded_resource_count, map = |ids: Vec<u64>| {
     match unneeded_resource_count{
         0 => None,
         _ => Some(ids.into_iter().map(RuntimeResourceID::from).collect::<Vec<_>>()),
     }
     })]
-    unneeded_resources: Option<Vec<RuntimeResourceID>>,
+    pub unneeded_resources: Option<Vec<RuntimeResourceID>>,
 
     #[br(parse_with = resource_parser, args(header.file_count))]
-    resources: HashMap<RuntimeResourceID, ResourceInfo>,
+    #[bw(write_with = empty_writer)]
+    pub resources: HashMap<RuntimeResourceID, ResourceInfo>,
 }
 
 #[parser(reader: reader, endian)]
@@ -93,6 +95,13 @@ impl ResourcePackage {
             .to_str()
             .unwrap()
             .contains("patch");
+        reader
+            .read_ne_args::<ResourcePackage>((is_patch,))
+            .map_err(ResourcePackageError::ParsingError)
+    }
+    
+    pub fn from_memory(data: Vec<u8>, is_patch: bool) -> Result<Self, ResourcePackageError> {
+        let mut reader = Cursor::new(data);
         reader
             .read_ne_args::<ResourcePackage>((is_patch,))
             .map_err(ResourcePackageError::ParsingError)
@@ -201,13 +210,14 @@ impl ResourcePackage {
 
 #[binrw]
 #[brw(repr(u8))]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ChunkType {
     Standard,
     Addon,
 }
 
 #[allow(dead_code)]
-#[derive(BinRead)]
+#[binrw]
 pub struct PackageMetadata {
     pub unknown: u32,
     pub chunk_id: u8,
@@ -217,15 +227,17 @@ pub struct PackageMetadata {
 }
 
 #[allow(dead_code)]
-#[derive(BinRead)]
+#[binrw]
 pub struct PackageHeader {
-    file_count: u32,
-    table_offset: u32,
-    table_size: u32,
+    pub file_count: u32,
+    pub offset_table_size: u32,
+    pub metadata_table_size: u32,
 }
 
 #[allow(dead_code)]
 #[derive(Copy, Clone)]
+#[binrw]
+#[brw(little)]
 pub struct PackageOffsetInfo {
     pub(crate) runtime_resource_id: RuntimeResourceID,
     pub(crate) data_offset: u64,
@@ -246,22 +258,27 @@ impl PackageOffsetInfo {
 }
 
 #[allow(dead_code)]
-#[derive(BinRead, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
+#[binrw]
+#[brw(little)]
 pub struct ResourceHeader {
-    pub(crate) m_type: [u8; 4],
-    references_chunk_size: u32,
-    states_chunk_size: u32,
+    pub(crate) resource_type: [u8; 4],
+    pub(crate) references_chunk_size: u32,
+    pub(crate) states_chunk_size: u32,
     pub(crate) data_size: u32,
     pub(crate) system_memory_requirement: u32,
     pub(crate) video_memory_requirement: u32,
 
     #[br(if (references_chunk_size > 0), parse_with = read_references)]
+    #[bw(write_with = empty_writer)]
     pub references: Vec<(RuntimeResourceID, ResourceReferenceFlags)>,
 }
 
 #[bitfield]
-#[derive(Copy, Clone, Eq, PartialEq, BinRead)]
+#[binrw]
 #[br(map = Self::from_bytes)]
+#[bw(map = |&x| Self::into_bytes(x))]
+#[derive(Copy, Clone, Eq, PartialEq)]
 pub struct ResourceReferenceFlagsV1 {
     pub pad_0: B1,
     pub runtime_acquired: bool,
@@ -274,8 +291,10 @@ pub struct ResourceReferenceFlagsV1 {
 }
 
 #[bitfield]
-#[derive(Copy, Clone, Eq, PartialEq, BinRead)]
+#[binrw]
 #[br(map = Self::from_bytes)]
+#[bw(map = |&x| Self::into_bytes(x))]
+#[derive(Copy, Clone, Eq, PartialEq)]
 pub struct ResourceReferenceFlagsV2 {
     pub language_code: B5,
     pub runtime_acquired: bool,
@@ -329,8 +348,10 @@ impl ResourceReferenceFlags {
 }
 
 #[bitfield]
-#[derive(Copy, Clone, Eq, PartialEq, BinRead)]
+#[binrw]
 #[br(map = Self::from_bytes)]
+#[bw(map = |&x| Self::into_bytes(x))]
+#[derive(Copy, Clone, Eq, PartialEq)]
 pub struct ResourceReferenceCountAndFlags {
     pub reference_count: B30,
     pub is_new_format: bool,
@@ -382,7 +403,7 @@ impl fmt::Display for PackageOffsetInfo {
 
 impl fmt::Display for ResourceHeader {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut res_type = self.m_type;
+        let mut res_type = self.resource_type;
         res_type.reverse();
         write!(
             f,
@@ -394,4 +415,10 @@ impl fmt::Display for ResourceHeader {
             self.video_memory_requirement
         )
     }
+}
+
+#[binrw::writer]
+fn empty_writer<T>(_: &T) -> BinResult<()> {
+    // This does nothing because the actual implementation is in the `PackageBuilder` struct.
+    Ok(())
 }
