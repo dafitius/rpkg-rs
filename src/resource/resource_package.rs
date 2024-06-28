@@ -1,6 +1,6 @@
 use crate::resource::resource_info::ResourceInfo;
 use crate::resource::resource_package::ReferenceType::{INSTALL, NORMAL, WEAK};
-use binrw::{parser, BinRead, BinReaderExt, BinResult};
+use binrw::{parser, BinRead, BinReaderExt, BinResult, binrw};
 use itertools::Itertools;
 use lz4::block::decompress_to_buffer;
 use memmap2::Mmap;
@@ -199,12 +199,19 @@ impl ResourcePackage {
     }
 }
 
+#[binrw]
+#[brw(repr(u8))]
+pub enum ChunkType {
+    Standard,
+    Addon,
+}
+
 #[allow(dead_code)]
 #[derive(BinRead)]
 pub struct PackageMetadata {
     pub unknown: u32,
     pub chunk_id: u8,
-    pub chunk_type: u8,
+    pub chunk_type: ChunkType,
     pub patch_id: u8,
     pub language_tag: [u8; 2], //this is presumably an unused language code, is always 'xx'
 }
@@ -252,47 +259,30 @@ pub struct ResourceHeader {
     pub references: Vec<(RuntimeResourceID, ResourceReferenceFlags)>,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq)]
-pub enum ResourceReferenceFlags {
-    Legacy(u8),
-    Standard(u8),
+#[bitfield]
+#[derive(Copy, Clone, Eq, PartialEq, BinRead)]
+#[br(map = Self::from_bytes)]
+pub struct ResourceReferenceFlagsV1 {
+    pub pad_0: B1,
+    pub runtime_acquired: bool,
+    pub weak_reference: bool,
+    pub pad_1: B1,
+    pub type_of_streaming_entity: bool,
+    pub state_streamed: bool,
+    pub media_streamed: bool,
+    pub install_dependency: bool,
 }
 
-impl ResourceReferenceFlags {
-    pub fn language_code(&self) -> u8 {
-        match self {
-            ResourceReferenceFlags::Legacy(b) => convert_old_flags_to_new_type(b).language_code(),
-            ResourceReferenceFlags::Standard(b) => b & 0b0001_1111,
-        }
-    }
-
-    pub fn is_acquired(&self) -> bool {
-        match self {
-            ResourceReferenceFlags::Legacy(b) => convert_old_flags_to_new_type(b).is_acquired(),
-            ResourceReferenceFlags::Standard(b) => (b & 0b0010_0000) != 0,
-        }
-    }
-
-    pub fn reference_type(&self) -> ReferenceType {
-        match self {
-            ResourceReferenceFlags::Legacy(b) => convert_old_flags_to_new_type(b).reference_type(),
-            ResourceReferenceFlags::Standard(b) => match b & 0b1100_0000 {
-                0 => INSTALL,
-                1 => NORMAL,
-                2 => WEAK,
-                _ => NORMAL,
-            },
-        }
-    }
-
-    pub fn new(reference_type: ReferenceType, acquired: bool) -> Self {
-        ResourceReferenceFlags::Standard(
-            0x1f | ((acquired as u8) << 0x5) | ((reference_type as u8) << 0x6),
-        )
-    }
+#[bitfield]
+#[derive(Copy, Clone, Eq, PartialEq, BinRead)]
+#[br(map = Self::from_bytes)]
+pub struct ResourceReferenceFlagsV2 {
+    pub language_code: B5,
+    pub runtime_acquired: bool,
+    #[bits = 2]
+    pub reference_type: ReferenceType,
 }
 
-#[allow(dead_code)]
 #[derive(BitfieldSpecifier, Debug)]
 #[bits = 2]
 pub enum ReferenceType {
@@ -301,27 +291,62 @@ pub enum ReferenceType {
     WEAK = 2,
 }
 
-fn convert_old_flags_to_new_type(old_flags: &u8) -> ResourceReferenceFlags {
-    ResourceReferenceFlags::new(
-        match old_flags {
-            _ if (old_flags & 0x44) != 0 => WEAK,
-            _ if !old_flags >> 7 == 1 => INSTALL,
-            _ => NORMAL,
-        },
-        (old_flags & 2) == 2,
-    )
+#[derive(Copy, Clone, Eq, PartialEq)]
+pub enum ResourceReferenceFlags {
+    V1(ResourceReferenceFlagsV1),
+    V2(ResourceReferenceFlagsV2),
+}
+
+impl ResourceReferenceFlags {
+    pub fn language_code(&self) -> u8 {
+        match self {
+            ResourceReferenceFlags::V1(_) => 0x1F,
+            ResourceReferenceFlags::V2(b) => b.language_code(),
+        }
+    }
+
+    pub fn is_acquired(&self) -> bool {
+        match self {
+            ResourceReferenceFlags::V1(b) => b.runtime_acquired(),
+            ResourceReferenceFlags::V2(b) => b.runtime_acquired(),
+        }
+    }
+
+    pub fn reference_type(&self) -> ReferenceType {
+        match self {
+            ResourceReferenceFlags::V1(b) => {
+                if b.weak_reference() {
+                    WEAK
+                } else if b.install_dependency() {
+                    INSTALL
+                } else {
+                    NORMAL
+                }
+            }
+            ResourceReferenceFlags::V2(b) => b.reference_type()
+        }
+    }
+}
+
+#[bitfield]
+#[derive(Copy, Clone, Eq, PartialEq, BinRead)]
+#[br(map = Self::from_bytes)]
+pub struct ResourceReferenceCountAndFlags {
+    pub reference_count: B30,
+    pub is_new_format: bool,
+    pub pad_0: B1,
 }
 
 #[parser(reader)]
 fn read_references() -> BinResult<Vec<(RuntimeResourceID, ResourceReferenceFlags)>> {
-    let reference_count_and_flag = u32::read_le(reader)?;
-    let reference_count = reference_count_and_flag & 0x3FFFFFFF;
-    let is_new_format = reference_count_and_flag & 0x40000000 == 0x40000000;
+    let reference_count_and_flag = reader.read_le::<ResourceReferenceCountAndFlags>()?;
+    let reference_count = reference_count_and_flag.reference_count();
+    let is_new_format = reference_count_and_flag.is_new_format();
 
     let arrays = if is_new_format {
         let flags: Vec<ResourceReferenceFlags> = (0..reference_count)
-            .map(|_| u8::read_le(reader))
-            .map_ok(ResourceReferenceFlags::Standard)
+            .map(|_| reader.read_le::<ResourceReferenceFlagsV2>())
+            .map_ok(ResourceReferenceFlags::V2)
             .collect::<BinResult<Vec<_>>>()?;
         let rrids: Vec<RuntimeResourceID> = (0..reference_count)
             .map(|_| u64::read_le(reader))
@@ -334,8 +359,8 @@ fn read_references() -> BinResult<Vec<(RuntimeResourceID, ResourceReferenceFlags
             .map_ok(RuntimeResourceID::from)
             .collect::<BinResult<Vec<_>>>()?;
         let flags: Vec<ResourceReferenceFlags> = (0..reference_count)
-            .map(|_| u8::read_le(reader))
-            .map_ok(ResourceReferenceFlags::Legacy)
+            .map(|_| reader.read_le::<ResourceReferenceFlagsV1>())
+            .map_ok(ResourceReferenceFlags::V1)
             .collect::<BinResult<Vec<_>>>()?;
         (rrids, flags)
     };
