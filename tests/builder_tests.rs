@@ -46,17 +46,18 @@ fn test_build_simple_package_v2() -> Result<(), Box<dyn std::error::Error>> {
     let first_resource = package.resources.get(&RuntimeResourceID::from_resource_id(&resource_ids[0])).unwrap();
     let second_resource = package.resources.get(&RuntimeResourceID::from_resource_id(&resource_ids[1])).unwrap();
 
+    // And check that we found the correct references in them and that they are in the expected order.
     assert_eq!(first_resource.references().len(), 1);
     assert_eq!(second_resource.references().len(), 2);
 
-    assert_eq!(first_resource.references().first().unwrap().1.language_code(), 0x1F);
-    assert_eq!(first_resource.references().first().unwrap().1.is_acquired(), false);
+    assert_eq!(first_resource.references()[0].1.language_code(), 0x1F);
+    assert_eq!(first_resource.references()[0].1.is_acquired(), false);
 
-    let second_resource_ref_1 = second_resource.references().iter().find(|(rid, _)| rid == &RuntimeResourceID::from(0x0069696969696969)).unwrap();
+    let second_resource_ref_1 = second_resource.references()[0];
     assert_eq!(second_resource_ref_1.1.language_code(), 0x06);
     assert_eq!(second_resource_ref_1.1.is_acquired(), false);
 
-    let second_resource_ref_2 = second_resource.references().iter().find(|(rid, _)| rid == &RuntimeResourceID::from(0x0042042042042042)).unwrap();
+    let second_resource_ref_2 = second_resource.references()[1];
     assert_eq!(second_resource_ref_2.1.language_code(), 0x09);
     assert_eq!(second_resource_ref_2.1.is_acquired(), true);
 

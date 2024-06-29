@@ -1,6 +1,6 @@
 use crate::resource::resource_info::ResourceInfo;
 use crate::resource::resource_package::ReferenceType::{INSTALL, NORMAL, WEAK};
-use binrw::{parser, BinRead, BinReaderExt, BinResult, binrw, BinWrite};
+use binrw::{parser, BinRead, BinReaderExt, BinResult, binrw};
 use itertools::Itertools;
 use lz4::block::decompress_to_buffer;
 use memmap2::Mmap;

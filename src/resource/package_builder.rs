@@ -3,9 +3,10 @@ use std::fs::File;
 use std::io;
 use std::io::{Read, Seek, Write};
 use std::path::{Path, PathBuf};
-
+use binrw::__private::Required;
 use binrw::BinWrite;
 use binrw::io::Cursor;
+use binrw::meta::WriteEndian;
 use thiserror::Error;
 
 use crate::resource::resource_package::{ChunkType, PackageHeader, PackageMetadata, PackageOffsetInfo, ResourceHeader, ResourcePackage, ResourceReferenceCountAndFlags, ResourceReferenceFlagsV2};
@@ -24,13 +25,14 @@ pub struct PackageResourceBuilder {
     data_size: u32,
     system_memory_requirement: u32,
     video_memory_requirement: u32,
-    references: HashMap<RuntimeResourceID, ResourceReferenceFlagsV2>,
+    // We store references in a vector because their order is important.
+    references: Vec<(RuntimeResourceID, ResourceReferenceFlagsV2)>,
 }
 
 #[derive(Debug, Error)]
 pub enum PackageResourceBuilderError {
     #[error("Error reading the file: {0}")]
-    IoError(#[from] std::io::Error),
+    IoError(#[from] io::Error),
 
     #[error("File is too large")]
     FileTooLarge,
@@ -57,7 +59,7 @@ impl PackageResourceBuilder {
             data_size: file_size as u32,
             system_memory_requirement: file_size as u32,
             video_memory_requirement: u32::MAX,
-            references: HashMap::new(),
+            references: vec![],
             blob: PackageResourceBlob::FromDisk(path.to_path_buf()),
         });
     }
@@ -79,7 +81,7 @@ impl PackageResourceBuilder {
             data_size: data.len() as u32,
             system_memory_requirement: data.len() as u32,
             video_memory_requirement: u32::MAX,
-            references: HashMap::new(),
+            references: vec![],
             blob: PackageResourceBlob::FromMemory(data),
         })
     }
@@ -87,13 +89,12 @@ impl PackageResourceBuilder {
     /// Adds a reference to the resource.
     ///
     /// This specifies that this resource depends on / references another resource.
-    /// Adding a reference that was previously added will overwrite its flags.
     ///
     /// # Arguments
     /// * `rrid` - The resource ID of the reference.
     /// * `flags` - The flags of the reference.
     pub fn with_reference(&mut self, rrid: RuntimeResourceID, flags: ResourceReferenceFlagsV2) -> &mut Self {
-        self.references.insert(rrid, flags);
+        self.references.push((rrid, flags));
         self
     }
 
@@ -130,7 +131,7 @@ pub struct PackageBuilder {
 #[derive(Debug, Error)]
 pub enum PackageBuilderError {
     #[error("Error writing the file: {0}")]
-    IoError(#[from] std::io::Error),
+    IoError(#[from] io::Error),
 
     #[error("Error serializing the package: {0}")]
     SerializationError(#[from] binrw::Error),
@@ -161,7 +162,6 @@ struct OffsetTableResult {
 
 struct MetadataTableResult {
     metadata_table_size: u32,
-    last_offset: u64,
 }
 
 impl PackageBuilder {
@@ -204,6 +204,19 @@ impl PackageBuilder {
     pub fn with_unneeded_resource(&mut self, rrid: RuntimeResourceID) -> &mut Self {
         self.unneeded_resources.insert(rrid);
         self
+    }
+
+    /// Patches data at a given offset and returns to the previous position.
+    fn backpatch<W: Write + Read + Seek, T: BinWrite>(writer: &mut W, patch_offset: u64, data: &T) -> Result<(), PackageBuilderError>
+    where
+        T: WriteEndian,
+        for<'a> T::Args<'a>: Required,
+    {
+        let current_offset = writer.stream_position().map_err(PackageBuilderError::IoError)?;
+        writer.seek(io::SeekFrom::Start(patch_offset)).map_err(PackageBuilderError::IoError)?;
+        data.write(writer).map_err(PackageBuilderError::SerializationError)?;
+        writer.seek(io::SeekFrom::Start(current_offset)).map_err(PackageBuilderError::IoError)?;
+        Ok(())
     }
 
     fn write_offset_table<W: Write + Read + Seek>(&self, writer: &mut W) -> Result<OffsetTableResult, PackageBuilderError> {
@@ -285,11 +298,9 @@ impl PackageBuilder {
                     return Err(PackageBuilderError::TooManyReferences);
                 }
 
-                // Calculate the size, move back to the start, rewrite, and move forward again.
+                // Calculate the size and patch the metadata.
                 resource_metadata.references_chunk_size = reference_table_size as u32;
-                writer.seek(io::SeekFrom::Start(metadata_offset)).map_err(PackageBuilderError::IoError)?;
-                resource_metadata.write(writer).map_err(PackageBuilderError::SerializationError)?;
-                writer.seek(io::SeekFrom::Start(reference_table_end)).map_err(PackageBuilderError::IoError)?;
+                PackageBuilder::backpatch(writer, metadata_offset, &resource_metadata)?;
             }
         }
 
@@ -303,7 +314,6 @@ impl PackageBuilder {
 
         Ok(MetadataTableResult {
             metadata_table_size: metadata_table_size as u32,
-            last_offset: metadata_table_end,
         })
     }
 
@@ -356,16 +366,13 @@ impl PackageBuilder {
         // Now that we're done writing the tables, let's patch the header.
         header.header.offset_table_size = offset_table_result.offset_table_size;
         header.header.metadata_table_size = metadata_table_result.metadata_table_size;
-        
-        writer.seek(io::SeekFrom::Start(0)).map_err(PackageBuilderError::IoError)?;
-        header.write(writer).map_err(PackageBuilderError::SerializationError)?;
-        writer.seek(io::SeekFrom::Start(metadata_table_result.last_offset)).map_err(PackageBuilderError::IoError)?;
+        PackageBuilder::backpatch(writer, 0, &header)?;
 
         // Write the resource data.
         for (rrid, resource) in &self.resources {
             // TODO: Support compression and scrambling.
             let data_offset = writer.stream_position().map_err(PackageBuilderError::IoError)?;
-            
+
             match &resource.blob {
                 PackageResourceBlob::FromDisk(path) => {
                     let mut file = File::open(path).map_err(PackageBuilderError::IoError)?;
@@ -375,19 +382,16 @@ impl PackageBuilder {
                     writer.write_all(&data).map_err(PackageBuilderError::IoError)?;
                 }
             }
-            
+
             // Patch the offset into.
             let offset_info = PackageOffsetInfo {
                 runtime_resource_id: rrid.clone(),
                 data_offset,
                 compressed_size_and_is_scrambled_flag: 0,
             };
-            
-            let current_offset = writer.stream_position().map_err(PackageBuilderError::IoError)?;
-            
-            writer.seek(io::SeekFrom::Start(offset_table_result.resource_entry_offsets[&rrid])).map_err(PackageBuilderError::IoError)?;
-            offset_info.write(writer).map_err(PackageBuilderError::SerializationError)?;
-            writer.seek(io::SeekFrom::Start(current_offset)).map_err(PackageBuilderError::IoError)?;
+
+            let patch_offset = offset_table_result.resource_entry_offsets[&rrid];
+            PackageBuilder::backpatch(writer, patch_offset, &offset_info)?;
         }
 
         Ok(())
