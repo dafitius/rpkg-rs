@@ -9,10 +9,10 @@ use binrw::io::Cursor;
 use binrw::meta::WriteEndian;
 use thiserror::Error;
 
-use crate::resource::resource_package::{ChunkType, PackageHeader, PackageMetadata, PackageOffsetInfo, ResourceHeader, ResourcePackage, ResourcePackageSource, ResourceReferenceCountAndFlags, ResourceReferenceFlagsV2};
+use crate::resource::resource_package::{ChunkType, PackageHeader, PackageMetadata, PackageOffsetInfo, PackageVersion, ResourceHeader, ResourcePackage, ResourcePackageSource, ResourceReferenceCountAndFlags, ResourceReferenceFlagsV2};
 use crate::resource::runtime_resource_id::RuntimeResourceID;
 
-pub enum PackageResourceBlob {
+enum PackageResourceBlob {
     FromFile { path: PathBuf, size: u32 },
     FromFileAtOffset { path: PathBuf, offset: u64, size: u32 },
     FromMemory(Vec<u8>),
@@ -152,15 +152,6 @@ impl PackageResourceBuilder {
         self.video_memory_requirement = video_memory_requirement;
         self
     }
-}
-
-/// The version of the package.
-///
-/// `RPKGv1` is the original version of the package format used in Hitman 2016 and Hitman 2.
-/// `RPKGv2` is the updated version of the package format used in Hitman 3.
-pub enum PackageVersion {
-    RPKGv1,
-    RPKGv2,
 }
 
 /// A builder for creating a ResourcePackage.

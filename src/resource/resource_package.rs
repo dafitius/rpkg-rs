@@ -25,6 +25,9 @@ pub enum ResourcePackageError {
 
     #[error("Parsing error: {0}")]
     ParsingError(#[from] binrw::Error),
+    
+    #[error("Resource package has no source")]
+    NoSource,
 }
 
 pub enum ResourcePackageSource {
@@ -32,23 +35,32 @@ pub enum ResourcePackageSource {
     Memory(Vec<u8>),
 }
 
+/// The version of the package.
+///
+/// `RPKGv1` is the original version of the package format used in Hitman 2016 and Hitman 2.
+/// `RPKGv2` is the updated version of the package format used in Hitman 3.
+pub enum PackageVersion {
+    RPKGv1,
+    RPKGv2,
+}
+
 #[allow(dead_code)]
 #[binrw]
 #[brw(little, import(is_patch: bool))]
 pub struct ResourcePackage {
     #[brw(ignore)]
-    pub source: Option<ResourcePackageSource>,
+    pub(crate) source: Option<ResourcePackageSource>,
 
-    pub magic: [u8; 4],
+    pub(crate) magic: [u8; 4],
 
     #[br(if (magic == *b"2KPR"))]
     #[bw(if (magic == b"2KPR"))]
-    pub metadata: Option<PackageMetadata>,
+    pub(crate) metadata: Option<PackageMetadata>,
 
     pub header: PackageHeader,
 
     #[brw(if (is_patch))]
-    pub unneeded_resource_count: u32,
+    pub(crate) unneeded_resource_count: u32,
 
     #[brw(if (is_patch))]
     #[br(count = unneeded_resource_count, map = |ids: Vec<u64>| {
@@ -57,7 +69,7 @@ pub struct ResourcePackage {
         _ => Some(ids.into_iter().map(RuntimeResourceID::from).collect::<Vec<_>>()),
     }
     })]
-    pub unneeded_resources: Option<Vec<RuntimeResourceID>>,
+    pub(crate) unneeded_resources: Option<Vec<RuntimeResourceID>>,
 
     #[br(parse_with = resource_parser, args(header.file_count))]
     #[bw(write_with = empty_writer)]
@@ -93,16 +105,20 @@ fn resource_parser(file_count: u32) -> BinResult<HashMap<RuntimeResourceID, Reso
 }
 
 impl ResourcePackage {
+    /// Parses a ResourcePackage from a file.
+    ///
+    /// # Arguments
+    /// * `package_path` - The path to the file to parse.
     pub fn from_file(package_path: &Path) -> Result<Self, ResourcePackageError> {
         let file = File::open(package_path).map_err(ResourcePackageError::IoError)?;
         let mmap = unsafe { Mmap::map(&file).map_err(ResourcePackageError::IoError)? };
         let mut reader = Cursor::new(&mmap[..]);
+                
         let is_patch = package_path
             .file_name()
-            .unwrap()
-            .to_str()
-            .unwrap()
-            .contains("patch");
+            .and_then(|f| f.to_str())
+            .map(|s| s.contains("patch"))
+            .unwrap_or(false);
 
         let mut package = reader
             .read_ne_args::<ResourcePackage>((is_patch,))
@@ -113,6 +129,11 @@ impl ResourcePackage {
         Ok(package)
     }
 
+    /// Parses a ResourcePackage from a memory buffer.
+    ///
+    /// # Arguments
+    /// * `data` - The data to parse.
+    /// * `is_patch` - Whether the package is a patch package.
     pub fn from_memory(data: Vec<u8>, is_patch: bool) -> Result<Self, ResourcePackageError> {
         let mut reader = Cursor::new(&data);
         let mut package = reader
@@ -124,40 +145,20 @@ impl ResourcePackage {
         Ok(package)
     }
 
-    pub fn magic(&self) -> String {
-        String::from_utf8_lossy(&self.magic)
-            .into_owned()
-            .chars()
-            .rev()
-            .collect()
-    }
-
-    pub fn metadata(&self) -> &Option<PackageMetadata> {
-        &self.metadata
-    }
-
-    pub fn header(&self) -> &PackageHeader {
-        &self.header
-    }
-
-    pub fn unneeded_resources(&self) -> Vec<RuntimeResourceID> {
-        match &self.unneeded_resources {
-            None => {
-                vec![]
-            }
-            Some(v) => (*v.clone()).to_vec(),
+    /// Returns the version of the package.
+    pub fn version(&self) -> PackageVersion {
+        match &self.magic {
+            b"GKPR" => PackageVersion::RPKGv1,
+            b"2KPR" => PackageVersion::RPKGv2,
+            _ => panic!("Unknown package version"),
         }
     }
 
-    pub fn resource_info(&self, rrid: &RuntimeResourceID) -> Option<&ResourceInfo> {
-        self.resources.get(rrid)
-    }
-
-    pub fn has_resource(&self, rrid: &RuntimeResourceID) -> bool {
-        self.resources.contains_key(rrid)
-    }
-
-    pub fn removes_resource(&self, rrid: &RuntimeResourceID) -> bool {
+    /// Returns whether the given resource is an unneeded resource.
+    ///
+    /// # Arguments
+    /// * `rrid` - The resource ID to check.
+    pub fn has_unneeded_resource(&self, rrid: &RuntimeResourceID) -> bool {
         if let Some(unneeded_resources) = &self.unneeded_resources {
             unneeded_resources.contains(rrid)
         } else {
@@ -165,15 +166,29 @@ impl ResourcePackage {
         }
     }
 
+    /// Returns a vector of all unneeded resource IDs.
+    pub fn unneeded_resource_ids(&self) -> Vec<&RuntimeResourceID> {
+        match &self.unneeded_resources {
+            None => {
+                vec![]
+            }
+            Some(val) => val.iter().collect(),
+        }
+    }
+
+    /// Reads the data of a resource from the package into memory.
+    /// 
+    /// # Arguments
+    /// * `rrid` - The resource ID of the resource to read.
     pub fn read_resource(
         &self,
-        package_path: &Path,
         rrid: &RuntimeResourceID,
     ) -> Result<Vec<u8>, ResourcePackageError> {
         let resource = self
             .resources
             .get(rrid)
             .ok_or(ResourcePackageError::ResourceNotFound)?;
+
         let final_size = resource
             .compressed_size()
             .unwrap_or(resource.header.data_size as usize);
@@ -182,13 +197,24 @@ impl ResourcePackage {
         let is_scrambled = resource.is_scrambled();
 
         // Extract the resource bytes from the resourcePackage
-        let mut file = File::open(package_path).map_err(ResourcePackageError::IoError)?;
-
-        file.seek(io::SeekFrom::Start(resource.entry.data_offset))
-            .unwrap();
-
-        let mut buffer = vec![0; final_size];
-        file.read_exact(&mut buffer).unwrap();
+        let mut buffer = match &self.source {
+            Some(ResourcePackageSource::File(package_path)) => {
+                let mut file = File::open(package_path).map_err(ResourcePackageError::IoError)?;
+                file.seek(io::SeekFrom::Start(resource.entry.data_offset)).map_err(ResourcePackageError::IoError)?;
+                
+                let mut buffer = vec![0; final_size];
+                file.read_exact(&mut buffer).map_err(ResourcePackageError::IoError)?;
+                buffer
+            }
+            
+            Some(ResourcePackageSource::Memory(data)) => {
+                let start_offset = resource.entry.data_offset as usize;
+                let end_offset = start_offset + resource.header.data_size as usize;
+                data[start_offset..end_offset].to_vec()
+            }
+            
+            None => return Err(ResourcePackageError::NoSource),
+        };
 
         if is_scrambled {
             let str_xor = [0xdc, 0x45, 0xa6, 0x9c, 0xd3, 0x72, 0x4c, 0xab];
@@ -209,19 +235,6 @@ impl ResourcePackage {
         }
 
         Ok(buffer)
-    }
-
-    pub fn resource_ids(&self) -> &HashMap<RuntimeResourceID, ResourceInfo> {
-        &self.resources
-    }
-
-    pub fn unneeded_resource_ids(&self) -> Vec<&RuntimeResourceID> {
-        match &self.unneeded_resources {
-            None => {
-                vec![]
-            }
-            Some(val) => val.iter().collect(),
-        }
     }
 }
 
@@ -343,6 +356,7 @@ impl ResourceReferenceFlags {
                 flags = flags.with_language_code(0x1F);
                 flags = flags.with_runtime_acquired(b.runtime_acquired());
 
+                // TODO: Validate that this logic is correct.
                 let reference_type = if b.install_dependency() {
                     INSTALL
                 } else if b.weak_reference() {

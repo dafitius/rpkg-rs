@@ -1,7 +1,7 @@
 use std::str::FromStr;
 use rpkg_rs::misc::resource_id::ResourceID;
-use rpkg_rs::resource::package_builder::{PackageBuilder, PackageResourceBuilder, PackageVersion};
-use rpkg_rs::resource::resource_package::{ChunkType, ResourcePackage, ResourceReferenceFlagsV2};
+use rpkg_rs::resource::package_builder::{PackageBuilder, PackageResourceBuilder};
+use rpkg_rs::resource::resource_package::{ChunkType, PackageVersion, ResourcePackage, ResourceReferenceFlagsV2};
 use rpkg_rs::resource::runtime_resource_id::RuntimeResourceID;
 
 #[test]
