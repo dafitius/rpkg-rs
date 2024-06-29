@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::{Cursor, Read, Seek};
 use std::iter::zip;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::{fmt, io};
 use thiserror::Error;
 
@@ -27,10 +27,18 @@ pub enum ResourcePackageError {
     ParsingError(#[from] binrw::Error),
 }
 
+pub enum ResourcePackageSource {
+    File(PathBuf),
+    Memory(Vec<u8>),
+}
+
 #[allow(dead_code)]
 #[binrw]
 #[brw(little, import(is_patch: bool))]
 pub struct ResourcePackage {
+    #[brw(ignore)]
+    pub source: Option<ResourcePackageSource>,
+
     pub magic: [u8; 4],
 
     #[br(if (magic == *b"2KPR"))]
@@ -95,16 +103,25 @@ impl ResourcePackage {
             .to_str()
             .unwrap()
             .contains("patch");
-        reader
+
+        let mut package = reader
             .read_ne_args::<ResourcePackage>((is_patch,))
-            .map_err(ResourcePackageError::ParsingError)
+            .map_err(ResourcePackageError::ParsingError)?;
+
+        package.source = Some(ResourcePackageSource::File(package_path.to_path_buf()));
+
+        Ok(package)
     }
-    
+
     pub fn from_memory(data: Vec<u8>, is_patch: bool) -> Result<Self, ResourcePackageError> {
-        let mut reader = Cursor::new(data);
-        reader
+        let mut reader = Cursor::new(&data);
+        let mut package = reader
             .read_ne_args::<ResourcePackage>((is_patch,))
-            .map_err(ResourcePackageError::ParsingError)
+            .map_err(ResourcePackageError::ParsingError)?;
+
+        package.source = Some(ResourcePackageSource::Memory(data));
+
+        Ok(package)
     }
 
     pub fn magic(&self) -> String {
@@ -314,6 +331,32 @@ pub enum ReferenceType {
 pub enum ResourceReferenceFlags {
     V1(ResourceReferenceFlagsV1),
     V2(ResourceReferenceFlagsV2),
+}
+
+impl ResourceReferenceFlags {
+    pub fn as_v2(&self) -> ResourceReferenceFlagsV2 {
+        match self {
+            ResourceReferenceFlags::V2(b) => *b,
+            ResourceReferenceFlags::V1(b) => {
+                let mut flags = ResourceReferenceFlagsV2::new();
+
+                flags = flags.with_language_code(0x1F);
+                flags = flags.with_runtime_acquired(b.runtime_acquired());
+
+                let reference_type = if b.install_dependency() {
+                    INSTALL
+                } else if b.weak_reference() {
+                    WEAK
+                } else {
+                    NORMAL
+                };
+
+                flags = flags.with_reference_type(reference_type);
+
+                flags
+            }
+        }
+    }
 }
 
 impl ResourceReferenceFlags {

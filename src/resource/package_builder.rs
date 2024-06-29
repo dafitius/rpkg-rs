@@ -9,12 +9,24 @@ use binrw::io::Cursor;
 use binrw::meta::WriteEndian;
 use thiserror::Error;
 
-use crate::resource::resource_package::{ChunkType, PackageHeader, PackageMetadata, PackageOffsetInfo, ResourceHeader, ResourcePackage, ResourceReferenceCountAndFlags, ResourceReferenceFlagsV2};
+use crate::resource::resource_package::{ChunkType, PackageHeader, PackageMetadata, PackageOffsetInfo, ResourceHeader, ResourcePackage, ResourcePackageSource, ResourceReferenceCountAndFlags, ResourceReferenceFlagsV2};
 use crate::resource::runtime_resource_id::RuntimeResourceID;
 
 pub enum PackageResourceBlob {
-    FromDisk(PathBuf),
+    FromFile { path: PathBuf, size: u32 },
+    FromFileAtOffset { path: PathBuf, offset: u64, size: u32 },
     FromMemory(Vec<u8>),
+}
+
+impl PackageResourceBlob {
+    /// The size of the resource blob in bytes.
+    pub fn size(&self) -> u32 {
+        match self {
+            PackageResourceBlob::FromFile { size, .. } => *size,
+            PackageResourceBlob::FromFileAtOffset { size, .. } => *size,
+            PackageResourceBlob::FromMemory(data) => data.len() as u32,
+        }
+    }
 }
 
 /// A builder for creating a resource within a ResourcePackage
@@ -22,7 +34,6 @@ pub struct PackageResourceBuilder {
     rrid: RuntimeResourceID,
     blob: PackageResourceBlob,
     resource_type: String,
-    data_size: u32,
     system_memory_requirement: u32,
     video_memory_requirement: u32,
     // We store references in a vector because their order is important.
@@ -36,6 +47,12 @@ pub enum PackageResourceBuilderError {
 
     #[error("File is too large")]
     FileTooLarge,
+
+    #[error("The offset you provided is after the end of the file")]
+    InvalidFileOffset,
+
+    #[error("The size you provided extends beyond the end of the file")]
+    InvalidFileBlobSize,
 }
 
 /// A builder for creating a resource within a ResourcePackage.
@@ -46,7 +63,7 @@ impl PackageResourceBuilder {
     /// * `rrid` - The resource ID of the resource.
     /// * `resource_type` - The type of the resource.
     /// * `path` - The path to the file.
-    pub fn from_disk(rrid: RuntimeResourceID, resource_type: &str, path: &Path) -> Result<Self, PackageResourceBuilderError> {
+    pub fn from_file(rrid: RuntimeResourceID, resource_type: &str, path: &Path) -> Result<Self, PackageResourceBuilderError> {
         let file_size = path.metadata().map_err(PackageResourceBuilderError::IoError)?.len();
 
         if file_size >= u32::MAX as u64 {
@@ -56,11 +73,39 @@ impl PackageResourceBuilder {
         return Ok(Self {
             rrid,
             resource_type: resource_type.to_string(),
-            data_size: file_size as u32,
             system_memory_requirement: file_size as u32,
             video_memory_requirement: u32::MAX,
             references: vec![],
-            blob: PackageResourceBlob::FromDisk(path.to_path_buf()),
+            blob: PackageResourceBlob::FromFile { path: path.to_path_buf(), size: file_size as u32 },
+        });
+    }
+
+    /// Create a new resource builder from a file on disk, but only reading a part of it.
+    ///
+    /// # Arguments
+    /// * `rrid` - The resource ID of the resource.
+    /// * `resource_type` - The type of the resource.
+    /// * `path` - The path to the file.
+    /// * `offset` - The offset of the file to start reading from.
+    /// * `size` - The size of the data to read from that offset.
+    pub fn from_file_at_offset(rrid: RuntimeResourceID, resource_type: &str, path: &Path, offset: u64, size: u32) -> Result<Self, PackageResourceBuilderError> {
+        let file_size = path.metadata().map_err(PackageResourceBuilderError::IoError)?.len();
+
+        if offset >= file_size {
+            return Err(PackageResourceBuilderError::InvalidFileOffset);
+        }
+
+        if offset + size as u64 > file_size {
+            return Err(PackageResourceBuilderError::InvalidFileBlobSize);
+        }
+
+        return Ok(Self {
+            rrid,
+            resource_type: resource_type.to_string(),
+            system_memory_requirement: size,
+            video_memory_requirement: u32::MAX,
+            references: vec![],
+            blob: PackageResourceBlob::FromFileAtOffset { path: path.to_path_buf(), offset, size },
         });
     }
 
@@ -78,7 +123,6 @@ impl PackageResourceBuilder {
         Ok(Self {
             rrid,
             resource_type: resource_type.to_string(),
-            data_size: data.len() as u32,
             system_memory_requirement: data.len() as u32,
             video_memory_requirement: u32::MAX,
             references: vec![],
@@ -153,6 +197,12 @@ pub enum PackageBuilderError {
 
     #[error("Resource type is not valid")]
     InvalidResourceType,
+
+    #[error("Cannot build from a resource package without a source")]
+    NoSource,
+
+    #[error("Could not duplicate a resource from the source package: {0}")]
+    CannotDuplicateResource(#[from] PackageResourceBuilderError),
 }
 
 struct OffsetTableResult {
@@ -178,6 +228,61 @@ impl PackageBuilder {
             resources: HashMap::new(),
             unneeded_resources: HashSet::new(),
         }
+    }
+
+    /// Creates a new package builder by duplicating an existing ResourcePackage.
+    ///
+    /// # Arguments
+    /// * `resource_package` - The ResourcePackage to duplicate.
+    pub fn from_resource_package(resource_package: &ResourcePackage) -> Result<Self, PackageBuilderError> {
+        let source = resource_package.source.as_ref().ok_or(PackageBuilderError::NoSource)?;
+
+        let mut package = Self {
+            chunk_id: resource_package.metadata.as_ref().map(|m| m.chunk_id).unwrap_or(0),
+            chunk_type: resource_package.metadata.as_ref().map(|m| m.chunk_type).unwrap_or(ChunkType::Standard),
+            patch_id: resource_package.metadata.as_ref().map(|m| m.patch_id).unwrap_or(0),
+            resources: HashMap::new(),
+            unneeded_resources: HashSet::new(),
+        };
+
+        for (rrid, resource) in &resource_package.resources {
+            let mut builder = match source {
+                // TODO: Deal with compressed and scrambled data.
+                ResourcePackageSource::File(source_path) => {
+                    PackageResourceBuilder::from_file_at_offset(
+                        *rrid,
+                        &resource.data_type(),
+                        source_path,
+                        resource.entry.data_offset,
+                        resource.header.data_size
+                    ).map_err(PackageBuilderError::CannotDuplicateResource)?
+                }
+                ResourcePackageSource::Memory(source_data) => {
+                    let start_offset = resource.entry.data_offset as usize;
+                    let end_offset = start_offset + resource.header.data_size as usize;
+
+                    PackageResourceBuilder::from_memory(
+                        *rrid,
+                        &resource.data_type(),
+                        source_data[start_offset..end_offset].to_vec()
+                    ).map_err(PackageBuilderError::CannotDuplicateResource)?
+                }
+            };
+
+            builder.with_memory_requirements(resource.system_memory_requirement(), resource.video_memory_requirement());
+
+            for (rrid, flags) in resource.references() {
+                builder.with_reference(*rrid, flags.as_v2());
+            }
+
+            package.with_resource(builder);
+        }
+
+        for rrid in resource_package.unneeded_resource_ids() {
+            package.with_unneeded_resource(*rrid);
+        }
+
+        Ok(package)
     }
 
     /// Sets the patch ID of the package.
@@ -219,6 +324,7 @@ impl PackageBuilder {
         Ok(())
     }
 
+    /// Writes the offset table to the given writer.
     fn write_offset_table<W: Write + Read + Seek>(&self, writer: &mut W) -> Result<OffsetTableResult, PackageBuilderError> {
         // We need to keep a map of rrid => offset to patch the data offsets later.
         let mut resource_entry_offsets = HashMap::new();
@@ -251,6 +357,7 @@ impl PackageBuilder {
         })
     }
 
+    /// Writes the metadata table to the given writer.
     fn write_metadata_table<W: Write + Read + Seek>(&self, writer: &mut W) -> Result<MetadataTableResult, PackageBuilderError> {
         let metadata_table_start = writer.stream_position().map_err(PackageBuilderError::IoError)?;
 
@@ -263,7 +370,7 @@ impl PackageBuilder {
                 resource_type: resource.resource_type.as_bytes().try_into().map_err(|_| PackageBuilderError::InvalidResourceType)?,
                 references_chunk_size: 0,
                 states_chunk_size: 0,
-                data_size: resource.data_size,
+                data_size: resource.blob.size(),
                 system_memory_requirement: resource.system_memory_requirement,
                 video_memory_requirement: resource.video_memory_requirement,
                 references: Vec::new(),
@@ -317,6 +424,7 @@ impl PackageBuilder {
         })
     }
 
+    /// Builds the package, writing it to the given writer.
     fn build_internal<W: Write + Read + Seek>(&self, version: PackageVersion, is_patch: bool, writer: &mut W) -> Result<(), PackageBuilderError> {
         // Perform some basic validation.
         if self.resources.is_empty() {
@@ -333,6 +441,7 @@ impl PackageBuilder {
 
         // First create a base header. We'll fill it and patch it later.
         let mut header = ResourcePackage {
+            source: None,
             magic: match version {
                 PackageVersion::RPKGv1 => *b"GKPR",
                 PackageVersion::RPKGv2 => *b"2KPR",
@@ -374,9 +483,15 @@ impl PackageBuilder {
             let data_offset = writer.stream_position().map_err(PackageBuilderError::IoError)?;
 
             match &resource.blob {
-                PackageResourceBlob::FromDisk(path) => {
+                PackageResourceBlob::FromFile { path, .. } => {
                     let mut file = File::open(path).map_err(PackageBuilderError::IoError)?;
                     io::copy(&mut file, writer).map_err(PackageBuilderError::IoError)?;
+                }
+                PackageResourceBlob::FromFileAtOffset { path, offset, size } => {
+                    // Copy `size` bytes from `offset` in the file to the writer.
+                    let mut file = File::open(path).map_err(PackageBuilderError::IoError)?;
+                    file.seek(io::SeekFrom::Start(*offset)).map_err(PackageBuilderError::IoError)?;
+                    io::copy(&mut file.take(*size as u64), writer).map_err(PackageBuilderError::IoError)?;
                 }
                 PackageResourceBlob::FromMemory(data) => {
                     writer.write_all(&data).map_err(PackageBuilderError::IoError)?;
