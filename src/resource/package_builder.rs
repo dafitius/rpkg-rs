@@ -171,9 +171,6 @@ pub enum PackageBuilderError {
     #[error("Error serializing the package: {0}")]
     SerializationError(#[from] binrw::Error),
 
-    #[error("No resources added to the package")]
-    NoResources,
-
     #[error("Unneeded resources are only supported when building a patch package")]
     UnneededResourcesNotSupported,
 
@@ -418,10 +415,6 @@ impl PackageBuilder {
     /// Builds the package, writing it to the given writer.
     fn build_internal<W: Write + Read + Seek>(&self, version: PackageVersion, is_patch: bool, writer: &mut W) -> Result<(), PackageBuilderError> {
         // Perform some basic validation.
-        if self.resources.is_empty() {
-            return Err(PackageBuilderError::NoResources);
-        }
-
         if !self.unneeded_resources.is_empty() && !is_patch {
             return Err(PackageBuilderError::UnneededResourcesNotSupported);
         }
@@ -520,10 +513,6 @@ impl PackageBuilder {
     /// * `version` - The version of the package to build.
     /// * `is_patch` - Whether the package is a patch package.
     pub fn build_in_memory(self, version: PackageVersion, is_patch: bool) -> Result<Vec<u8>, PackageBuilderError> {
-        if self.resources.is_empty() {
-            return Err(PackageBuilderError::NoResources);
-        }
-
         let mut writer = Cursor::new(vec![]);
         self.build_internal(version, is_patch, &mut writer)?;
 
