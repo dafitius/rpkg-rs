@@ -1,0 +1,40 @@
+use std::path::PathBuf;
+use rpkg_rs::resource::partition_manager::PartitionManager;
+use rpkg_rs::WoaVersion;
+
+fn test_game(path_env_var: &str, game_version: WoaVersion) -> Result<(), Box<dyn std::error::Error>> {
+    // Read game path from env variable
+    let game_retail_path = match std::env::var(path_env_var) {
+        Ok(path) => PathBuf::from(path),
+        Err(_) => return Err(format!("{} environment variable not set", path_env_var).into()),
+    };
+
+    let package_manager = PartitionManager::mount_game(
+        game_retail_path,
+        game_version,
+        true,
+        |_, _| {},
+    )?;
+
+    assert!(package_manager.partitions.len() > 0);
+    
+    Ok(())
+}
+
+#[test]
+#[ignore]
+fn test_hm2016() -> Result<(), Box<dyn std::error::Error>> {
+    test_game("HM2016_PATH", WoaVersion::HM2016)
+}
+
+#[test]
+#[ignore]
+fn test_hm2() -> Result<(), Box<dyn std::error::Error>> {
+    test_game("HM2_PATH", WoaVersion::HM2)
+}
+
+#[test]
+#[ignore]
+fn test_hm3() -> Result<(), Box<dyn std::error::Error>> {
+    test_game("HM3_PATH", WoaVersion::HM3)
+}
