@@ -74,7 +74,7 @@ fn test_game_rebuild(path_env_var: &str, game_version: WoaVersion) -> Result<(),
         for (patch_id, package) in &partition.packages {
             let output_name = partition.partition_info().filename(*patch_id);
 
-            println!("Rebuilding package '{}'", output_name);
+            println!("Rebuilding package '{}' of game '{:?}'", output_name, game_version);
 
             // Create a package builder to duplicate the package.
             let mut builder = PackageBuilder::from_resource_package(&package)?;
@@ -99,12 +99,14 @@ fn test_game_rebuild(path_env_var: &str, game_version: WoaVersion) -> Result<(),
             // After it's built, check if the generated file is the same as the original.
             let original_file = match &package.source {
                 Some(ResourcePackageSource::File(path)) => path,
-                _ => Err(format!("Package '{}' has no source", output_name))?,
+                _ => Err(format!("Package '{}' of game '{:?}' has no source", output_name, game_version))?,
             };
             
             let generated_file = output_path.join(&output_name);
 
-            assert_eq!(original_file.metadata()?.len(), generated_file.metadata()?.len());
+            if original_file.metadata()?.len() != generated_file.metadata()?.len() {
+                return Err(format!("File size mismatch for package '{}' of game '{:?}'", output_name, game_version).into());
+            }
 
             // Hash the files and compare them.
             let original_hash = {
@@ -121,7 +123,9 @@ fn test_game_rebuild(path_env_var: &str, game_version: WoaVersion) -> Result<(),
                 hasher.finalize()
             };
             
-            assert_eq!(original_hash, generated_hash);
+            if original_hash != generated_hash {
+                return Err(format!("Hash mismatch for package '{}' of game '{:?}'", output_name, game_version).into());
+            }
             
             // Remove the generated file.
             fs::remove_file(generated_file)?;
