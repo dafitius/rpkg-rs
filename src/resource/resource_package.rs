@@ -222,7 +222,7 @@ impl ResourcePackage {
 
             Some(ResourcePackageSource::Memory(data)) => {
                 let start_offset = resource.entry.data_offset as usize;
-                let end_offset = start_offset + resource.header.data_size as usize;
+                let end_offset = start_offset + final_size as usize;
                 data[start_offset..end_offset].to_vec()
             }
 

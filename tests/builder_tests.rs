@@ -63,3 +63,52 @@ fn test_build_simple_package_v2() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+
+fn test_package_with_resource(compression_level: Option<u32>, should_scramble: bool) -> Result<(), Box<dyn std::error::Error>> {
+    let resource_id = ResourceID::from_str("[assembly:/res1.brick].pc_entitytype")?;
+
+    // Start building the package.
+    let mut builder = PackageBuilder::new(69, ChunkType::Standard);
+
+    // Create a fake resource id and data for the resource.
+    let rrid: RuntimeResourceID = RuntimeResourceID::from_resource_id(&resource_id);
+    let fake_data: Vec<u8> = (0..1024).map(|j| (j as u8)).collect();
+
+    // Create a resource from memory and add it to the package.
+    let resource = PackageResourceBuilder::from_memory(rrid, "TEMP", fake_data.clone(), compression_level, should_scramble)?;
+
+    builder.with_resource(resource);
+
+    // Build the package in memory.
+    let package_data = builder.build_in_memory(PackageVersion::RPKGv2, false, false)?;
+
+    // Print as hex.
+    for byte in &package_data {
+        print!("{:02X}", *byte);
+    }
+    println!("");
+
+    // Now let's try to parse it again.
+    let package = ResourcePackage::from_memory(package_data, false)?;
+
+    // And check that its data matches the original.
+    let resource_data = package.read_resource(&rrid).unwrap();
+    assert_eq!(resource_data, fake_data);
+
+    Ok(())
+}
+
+#[test]
+fn test_compression() -> Result<(), Box<dyn std::error::Error>> {
+    test_package_with_resource(Some(4), false)
+}
+
+#[test]
+fn test_scrambling() -> Result<(), Box<dyn std::error::Error>> {
+    test_package_with_resource(None, true)
+}
+
+#[test]
+fn test_compression_and_scrambling() -> Result<(), Box<dyn std::error::Error>> {
+    test_package_with_resource(Some(4), true)
+}
