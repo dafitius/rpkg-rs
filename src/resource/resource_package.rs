@@ -5,7 +5,6 @@ use itertools::Itertools;
 use lz4::block::decompress_to_buffer;
 use memmap2::Mmap;
 use modular_bitfield::prelude::*;
-use std::collections::HashMap;
 use std::fs::File;
 use std::io::{Cursor, Read, Seek};
 use std::iter::zip;

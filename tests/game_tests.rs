@@ -18,6 +18,9 @@ fn test_game(path_env_var: &str, game_version: WoaVersion) -> Result<(), Box<dyn
 
     assert!(package_manager.partitions.len() > 0);
     
+    let packages = package_manager.partitions.iter().map(|p| p.packages.len()).sum::<usize>();
+    assert!(packages > 0);
+    
     Ok(())
 }
 

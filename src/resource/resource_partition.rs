@@ -68,7 +68,7 @@ pub struct ResourcePartition {
     info: PartitionInfo,
     mount_location: Option<PathBuf>,
 
-    packages: HashMap<PatchId, ResourcePackage>,
+    pub packages: HashMap<PatchId, ResourcePackage>,
     resources: HashMap<RuntimeResourceID, PatchId>,
 }
 
@@ -225,7 +225,7 @@ impl ResourcePartition {
             .resources
             .get(rrid)
             .ok_or(ResourcePartitionError::ResourceNotAvailable)?;
-        
+
         let rpkg = self
             .packages
             .get(&package_index)
@@ -252,12 +252,12 @@ impl ResourcePartition {
             .resources
             .get(rrid)
             .ok_or(ResourcePartitionError::ResourceNotAvailable)?;
-        
+
         let rpkg = self
             .packages
             .get(&package_index)
             .ok_or(ResourcePartitionError::NotMounted)?;
-        
+
         let bytes = rpkg
             .read_resource(rrid)
             .map_err(|e| {
@@ -266,7 +266,7 @@ impl ResourcePartition {
                     self.info.filename(package_index),
                 )
             })?;
-        
+
         T::process_data(woa_version, bytes).map_err(ResourcePartitionError::ResourceError)
     }
 
@@ -279,7 +279,7 @@ impl ResourcePartition {
             .packages
             .get(&patch_id)
             .ok_or(ResourcePartitionError::NotMounted)?;
-        
+
         rpkg.read_resource(rrid)
             .map_err(|e| {
                 ResourcePartitionError::ReadResourcePackageError(e, self.info.filename(patch_id))
@@ -294,12 +294,12 @@ impl ResourcePartition {
             .resources
             .get(rrid)
             .ok_or(ResourcePartitionError::ResourceNotAvailable)?;
-        
+
         let rpkg = self
             .packages
             .get(package_index)
             .ok_or(ResourcePartitionError::NotMounted)?;
-        
+
         rpkg.resources.get(rrid)
             .ok_or(ResourcePartitionError::ResourceNotAvailable)
     }
@@ -313,7 +313,7 @@ impl ResourcePartition {
             .packages
             .get(&patch_id)
             .ok_or(ResourcePartitionError::NotMounted)?;
-        
+
         rpkg.resources.get(rrid)
             .ok_or(ResourcePartitionError::ResourceNotAvailable)
     }
@@ -346,7 +346,7 @@ impl Debug for ResourcePartition {
             .values()
             .map(|v| v.resources.len())
             .sum::<usize>();
-        
+
         write!(
             f,
             "{{index: {}, name: {}, edge_resources: {}, total_resources: {} }}",

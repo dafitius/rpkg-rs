@@ -1,8 +1,9 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fs::File;
 use std::io;
 use std::io::{Read, Seek, Write};
 use std::path::{Path, PathBuf};
+
 use binrw::__private::Required;
 use binrw::BinWrite;
 use binrw::io::Cursor;
@@ -14,18 +15,23 @@ use crate::resource::resource_package::{ChunkType, PackageHeader, PackageMetadat
 use crate::resource::runtime_resource_id::RuntimeResourceID;
 
 enum PackageResourceBlob {
-    FromFile { path: PathBuf, size: u32 },
-    FromFileAtOffset { path: PathBuf, offset: u64, size: u32 },
-    FromMemory(Vec<u8>),
+    FromFile { path: PathBuf, size: u32, should_compress: bool, should_scramble: bool },
+    FromFileAtOffset { path: PathBuf, offset: u64, size: u32, compressed_size: Option<u32>, is_scrambled: bool },
+    FromMemory { data: Vec<u8>, decompressed_size: Option<u32>, is_scrambled: bool },
 }
 
 impl PackageResourceBlob {
-    /// The size of the resource blob in bytes.
+    /// The (uncompressed) size of the resource blob in bytes.
     pub fn size(&self) -> u32 {
         match self {
             PackageResourceBlob::FromFile { size, .. } => *size,
             PackageResourceBlob::FromFileAtOffset { size, .. } => *size,
-            PackageResourceBlob::FromMemory(data) => data.len() as u32,
+            PackageResourceBlob::FromMemory { data, decompressed_size, .. } => {
+                match decompressed_size {
+                    Some(size) => *size,
+                    None => data.len() as u32,
+                }
+            }
         }
     }
 }
@@ -37,7 +43,7 @@ pub struct PackageResourceBuilder {
     resource_type: [u8; 4],
     system_memory_requirement: u32,
     video_memory_requirement: u32,
-    // We store references in a vector because their order is important.
+    // We store references in a vector because their order is important and there can be duplicates.
     references: Vec<(RuntimeResourceID, ResourceReferenceFlagsV2)>,
 }
 
@@ -79,7 +85,15 @@ impl PackageResourceBuilder {
     /// * `rrid` - The resource ID of the resource.
     /// * `resource_type` - The type of the resource.
     /// * `path` - The path to the file.
-    pub fn from_file(rrid: RuntimeResourceID, resource_type: &str, path: &Path) -> Result<Self, PackageResourceBuilderError> {
+    /// * `should_compress` - Whether the file data should be compressed.
+    /// * `should_scramble` - Whether the file data should be scrambled.
+    pub fn from_file(
+        rrid: RuntimeResourceID,
+        resource_type: &str,
+        path: &Path,
+        should_compress: bool,
+        should_scramble: bool,
+    ) -> Result<Self, PackageResourceBuilderError> {
         let file_size = path.metadata().map_err(PackageResourceBuilderError::IoError)?.len();
 
         if file_size >= u32::MAX as u64 {
@@ -92,7 +106,7 @@ impl PackageResourceBuilder {
             system_memory_requirement: file_size as u32,
             video_memory_requirement: u32::MAX,
             references: vec![],
-            blob: PackageResourceBlob::FromFile { path: path.to_path_buf(), size: file_size as u32 },
+            blob: PackageResourceBlob::FromFile { path: path.to_path_buf(), size: file_size as u32, should_compress, should_scramble },
         });
     }
 
@@ -103,15 +117,27 @@ impl PackageResourceBuilder {
     /// * `resource_type` - The type of the resource.
     /// * `path` - The path to the file.
     /// * `offset` - The offset of the file to start reading from.
-    /// * `size` - The size of the data to read from that offset.
-    pub fn from_file_at_offset(rrid: RuntimeResourceID, resource_type: &str, path: &Path, offset: u64, size: u32) -> Result<Self, PackageResourceBuilderError> {
+    /// * `size` - The size of the data.
+    /// * `compressed_size` - The compressed size of the data, if the resource is compressed.
+    /// * `is_scrambled` - Whether the data is scrambled.
+    pub fn from_file_at_offset(
+        rrid: RuntimeResourceID,
+        resource_type: &str,
+        path: &Path,
+        offset: u64,
+        size: u32,
+        compressed_size: Option<u32>,
+        is_scrambled: bool,
+    ) -> Result<Self, PackageResourceBuilderError> {
         let file_size = path.metadata().map_err(PackageResourceBuilderError::IoError)?.len();
 
         if offset >= file_size {
             return Err(PackageResourceBuilderError::InvalidFileOffset);
         }
 
-        if offset + size as u64 > file_size {
+        let read_size = compressed_size.unwrap_or_else(|| size);
+
+        if offset + read_size as u64 > file_size {
             return Err(PackageResourceBuilderError::InvalidFileBlobSize);
         }
 
@@ -121,7 +147,7 @@ impl PackageResourceBuilder {
             system_memory_requirement: size,
             video_memory_requirement: u32::MAX,
             references: vec![],
-            blob: PackageResourceBlob::FromFileAtOffset { path: path.to_path_buf(), offset, size },
+            blob: PackageResourceBlob::FromFileAtOffset { path: path.to_path_buf(), offset, size, compressed_size, is_scrambled },
         });
     }
 
@@ -131,18 +157,28 @@ impl PackageResourceBuilder {
     /// * `rrid` - The resource ID of the resource.
     /// * `resource_type` - The type of the resource.
     /// * `data` - The data of the resource.
-    pub fn from_memory(rrid: RuntimeResourceID, resource_type: &str, data: Vec<u8>) -> Result<Self, PackageResourceBuilderError> {
+    /// * `decompressed_size` - The decompressed size of the data, if the resource is compressed.
+    /// * `is_scrambled` - Whether the data is scrambled.
+    pub fn from_memory(
+        rrid: RuntimeResourceID,
+        resource_type: &str,
+        data: Vec<u8>,
+        decompressed_size: Option<u32>,
+        is_scrambled: bool,
+    ) -> Result<Self, PackageResourceBuilderError> {
         if data.len() > u32::MAX as usize {
             return Err(PackageResourceBuilderError::FileTooLarge);
         }
 
+        let real_size = decompressed_size.unwrap_or(data.len() as u32);
+
         Ok(Self {
             rrid,
-            system_memory_requirement: data.len() as u32,
             resource_type: Self::resource_type_to_bytes(resource_type)?,
+            system_memory_requirement: real_size,
             video_memory_requirement: u32::MAX,
             references: vec![],
-            blob: PackageResourceBlob::FromMemory(data),
+            blob: PackageResourceBlob::FromMemory { data, decompressed_size, is_scrambled },
         })
     }
 
@@ -205,8 +241,8 @@ pub enum PackageBuilderError {
     #[error("Cannot build from a resource package without a source")]
     NoSource,
 
-    #[error("Could not duplicate a resource from the source package: {0}")]
-    CannotDuplicateResource(#[from] PackageResourceBuilderError),
+    #[error("Could not duplicate resource {0} from the source package: {1}")]
+    CannotDuplicateResource(RuntimeResourceID, PackageResourceBuilderError),
 }
 
 struct OffsetTableResult {
@@ -251,25 +287,39 @@ impl PackageBuilder {
 
         for (rrid, resource) in &resource_package.resources {
             let mut builder = match source {
-                // TODO: Deal with compressed and scrambled data.
                 ResourcePackageSource::File(source_path) => {
                     PackageResourceBuilder::from_file_at_offset(
                         *rrid,
                         &resource.data_type(),
                         source_path,
                         resource.entry.data_offset,
-                        resource.header.data_size
-                    ).map_err(PackageBuilderError::CannotDuplicateResource)?
+                        resource.header.data_size,
+                        resource.compressed_size(),
+                        resource.is_scrambled(),
+                    ).map_err(|e| PackageBuilderError::CannotDuplicateResource(*rrid, e))?
                 }
+
                 ResourcePackageSource::Memory(source_data) => {
+                    let read_size = resource
+                        .compressed_size()
+                        .unwrap_or(resource.header.data_size);
+
                     let start_offset = resource.entry.data_offset as usize;
-                    let end_offset = start_offset + resource.header.data_size as usize;
+                    let end_offset = start_offset + read_size as usize;
+
+                    let decompressed_size = if resource.is_compressed() {
+                        Some(resource.header.data_size)
+                    } else {
+                        None
+                    };
 
                     PackageResourceBuilder::from_memory(
                         *rrid,
                         &resource.data_type(),
-                        source_data[start_offset..end_offset].to_vec()
-                    ).map_err(PackageBuilderError::CannotDuplicateResource)?
+                        source_data[start_offset..end_offset].to_vec(),
+                        decompressed_size,
+                        resource.is_scrambled(),
+                    ).map_err(|e| PackageBuilderError::CannotDuplicateResource(*rrid, e))?
                 }
             };
 
@@ -479,30 +529,43 @@ impl PackageBuilder {
 
         // Write the resource data.
         for (rrid, resource) in &self.resources {
-            // TODO: Support compression and scrambling.
             let data_offset = writer.stream_position().map_err(PackageBuilderError::IoError)?;
 
-            match &resource.blob {
+            let (compressed_size, is_scrambled) = match &resource.blob {
                 PackageResourceBlob::FromFile { path, .. } => {
+                    // TODO: Support compression and scrambling.
+                    
                     let mut file = File::open(path).map_err(PackageBuilderError::IoError)?;
                     io::copy(&mut file, writer).map_err(PackageBuilderError::IoError)?;
+
+                    (None, false)
                 }
-                PackageResourceBlob::FromFileAtOffset { path, offset, size } => {
-                    // Copy `size` bytes from `offset` in the file to the writer.
+
+                PackageResourceBlob::FromFileAtOffset { path, offset, size, compressed_size, is_scrambled } => {
+                    let size_to_copy = compressed_size.unwrap_or_else(|| *size);
+
                     let mut file = File::open(path).map_err(PackageBuilderError::IoError)?;
                     file.seek(io::SeekFrom::Start(*offset)).map_err(PackageBuilderError::IoError)?;
-                    io::copy(&mut file.take(*size as u64), writer).map_err(PackageBuilderError::IoError)?;
-                }
-                PackageResourceBlob::FromMemory(data) => {
-                    writer.write_all(&data).map_err(PackageBuilderError::IoError)?;
-                }
-            }
+                    io::copy(&mut file.take(size_to_copy as u64), writer).map_err(PackageBuilderError::IoError)?;
 
-            // Patch the offset into.
+                    (*compressed_size, *is_scrambled)
+                }
+
+                PackageResourceBlob::FromMemory { data, decompressed_size, is_scrambled } => {
+                    writer.write_all(&data).map_err(PackageBuilderError::IoError)?;
+                    let compressed_size = decompressed_size.map(|_| data.len() as u32);
+                    (compressed_size, *is_scrambled)
+                }
+            };
+
+            // Patch the offset info.
+            // If the resource is not compressed, we set the compressed size to 0.
+            let final_compressed_size = compressed_size.unwrap_or_else(|| 0);
+
             let offset_info = PackageOffsetInfo {
                 runtime_resource_id: rrid.clone(),
                 data_offset,
-                compressed_size_and_is_scrambled_flag: 0,
+                flags: PackageOffsetFlags::new().with_compressed_size(final_compressed_size).with_is_scrambled(is_scrambled),
             };
 
             let patch_offset = offset_table_result.resource_entry_offsets[&rrid];
@@ -531,7 +594,6 @@ impl PackageBuilder {
     pub fn build_in_memory(self, version: PackageVersion, is_patch: bool) -> Result<Vec<u8>, PackageBuilderError> {
         let mut writer = Cursor::new(vec![]);
         self.build_internal(version, is_patch, &mut writer)?;
-
         Ok(writer.into_inner())
     }
 }
