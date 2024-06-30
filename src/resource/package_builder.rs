@@ -34,7 +34,7 @@ impl PackageResourceBlob {
 pub struct PackageResourceBuilder {
     rrid: RuntimeResourceID,
     blob: PackageResourceBlob,
-    resource_type: String,
+    resource_type: [u8; 4],
     system_memory_requirement: u32,
     video_memory_requirement: u32,
     // We store references in a vector because their order is important.
@@ -54,10 +54,25 @@ pub enum PackageResourceBuilderError {
 
     #[error("The size you provided extends beyond the end of the file")]
     InvalidFileBlobSize,
+    
+    #[error("Resource types must be exactly 4 characters")]
+    InvalidResourceType,
 }
 
 /// A builder for creating a resource within a ResourcePackage.
 impl PackageResourceBuilder {
+    /// Converts a resource type string to a byte array.
+    /// Characters are reversed since everything is little endian.
+    fn resource_type_to_bytes(resource_type: &str) -> Result<[u8; 4], PackageResourceBuilderError> {
+        resource_type
+            .chars()
+            .rev()
+            .collect::<String>()
+            .as_bytes()
+            .try_into()
+            .map_err(|_| PackageResourceBuilderError::InvalidResourceType)
+    }
+    
     /// Create a new resource builder from a file on disk.
     ///
     /// # Arguments
@@ -73,7 +88,7 @@ impl PackageResourceBuilder {
 
         return Ok(Self {
             rrid,
-            resource_type: resource_type.to_string(),
+            resource_type: Self::resource_type_to_bytes(resource_type)?,
             system_memory_requirement: file_size as u32,
             video_memory_requirement: u32::MAX,
             references: vec![],
@@ -102,7 +117,7 @@ impl PackageResourceBuilder {
 
         return Ok(Self {
             rrid,
-            resource_type: resource_type.to_string(),
+            resource_type: Self::resource_type_to_bytes(resource_type)?,
             system_memory_requirement: size,
             video_memory_requirement: u32::MAX,
             references: vec![],
@@ -123,8 +138,8 @@ impl PackageResourceBuilder {
 
         Ok(Self {
             rrid,
-            resource_type: resource_type.to_string(),
             system_memory_requirement: data.len() as u32,
+            resource_type: Self::resource_type_to_bytes(resource_type)?,
             video_memory_requirement: u32::MAX,
             references: vec![],
             blob: PackageResourceBlob::FromMemory(data),
@@ -354,9 +369,9 @@ impl PackageBuilder {
             let metadata_offset = writer.stream_position().map_err(PackageBuilderError::IoError)?;
 
             // Write the resource metadata followed by the references table if there are any.
-            // We set the references chunk size to 0 and we'll patch it later.
+            // We set the references chunk size to 0, and we'll patch it later.
             let mut resource_metadata = ResourceHeader {
-                resource_type: resource.resource_type.as_bytes().try_into().map_err(|_| PackageBuilderError::InvalidResourceType)?,
+                resource_type: resource.resource_type,
                 references_chunk_size: 0,
                 states_chunk_size: 0,
                 data_size: resource.blob.size(),
