@@ -418,7 +418,7 @@ impl ResourceReferenceFlags {
 pub struct ResourceReferenceCountAndFlags {
     pub reference_count: B30,
     pub is_new_format: bool,
-    pub pad_0: B1,
+    pub always_true: bool,
 }
 
 #[parser(reader)]

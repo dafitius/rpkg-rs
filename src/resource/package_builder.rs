@@ -440,7 +440,8 @@ impl PackageBuilder {
                 let reference_count_and_flags =
                     ResourceReferenceCountAndFlags::new()
                         .with_reference_count(resource.references.len() as u32)
-                        .with_is_new_format(true);
+                        .with_is_new_format(true)
+                        .with_always_true(true);
 
                 reference_count_and_flags.write(writer).map_err(PackageBuilderError::SerializationError)?;
 
