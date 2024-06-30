@@ -25,7 +25,7 @@ pub enum ResourcePackageError {
 
     #[error("Parsing error: {0}")]
     ParsingError(#[from] binrw::Error),
-    
+
     #[error("Resource package has no source")]
     NoSource,
 }
@@ -109,7 +109,7 @@ impl ResourcePackage {
         let file = File::open(package_path).map_err(ResourcePackageError::IoError)?;
         let mmap = unsafe { Mmap::map(&file).map_err(ResourcePackageError::IoError)? };
         let mut reader = Cursor::new(&mmap[..]);
-                
+
         let is_patch = package_path
             .file_name()
             .and_then(|f| f.to_str())
@@ -150,6 +150,23 @@ impl ResourcePackage {
         }
     }
 
+    /// Returns whether the package uses the legacy references format.
+    pub fn has_legacy_references(&self) -> bool {
+        self.resources
+            .iter()
+            .any(|(_, resource)| {
+                resource
+                    .references()
+                    .iter()
+                    .any(|(_, flags)| {
+                        match flags {
+                            ResourceReferenceFlags::V1(_) => true,
+                            ResourceReferenceFlags::V2(_) => false,
+                        }
+                    })
+            })
+    }
+
     /// Returns whether the given resource is an unneeded resource.
     ///
     /// # Arguments
@@ -173,7 +190,7 @@ impl ResourcePackage {
     }
 
     /// Reads the data of a resource from the package into memory.
-    /// 
+    ///
     /// # Arguments
     /// * `rrid` - The resource ID of the resource to read.
     pub fn read_resource(
@@ -197,18 +214,18 @@ impl ResourcePackage {
             Some(ResourcePackageSource::File(package_path)) => {
                 let mut file = File::open(package_path).map_err(ResourcePackageError::IoError)?;
                 file.seek(io::SeekFrom::Start(resource.entry.data_offset)).map_err(ResourcePackageError::IoError)?;
-                
+
                 let mut buffer = vec![0; final_size as usize];
                 file.read_exact(&mut buffer).map_err(ResourcePackageError::IoError)?;
                 buffer
             }
-            
+
             Some(ResourcePackageSource::Memory(data)) => {
                 let start_offset = resource.entry.data_offset as usize;
                 let end_offset = start_offset + resource.header.data_size as usize;
                 data[start_offset..end_offset].to_vec()
             }
-            
+
             None => return Err(ResourcePackageError::NoSource),
         };
 
@@ -338,7 +355,7 @@ pub struct ResourceReferenceFlagsV2 {
     pub reference_type: ReferenceType,
 }
 
-#[derive(BitfieldSpecifier, Debug)]
+#[derive(BitfieldSpecifier, Debug, Copy, Clone, Eq, PartialEq)]
 #[bits = 2]
 pub enum ReferenceType {
     INSTALL = 0,
@@ -353,6 +370,22 @@ pub enum ResourceReferenceFlags {
 }
 
 impl ResourceReferenceFlags {
+    pub fn as_v1(&self) -> ResourceReferenceFlagsV1 {
+        match self {
+            ResourceReferenceFlags::V1(b) => *b,
+            ResourceReferenceFlags::V2(b) => {
+                let mut flags = ResourceReferenceFlagsV1::new();
+
+                // TODO: Validate that this logic is correct.
+                flags = flags.with_runtime_acquired(b.runtime_acquired());
+                flags = flags.with_weak_reference(b.reference_type() == WEAK);
+                flags = flags.with_install_dependency(b.reference_type() == INSTALL);
+
+                flags
+            }
+        }
+    }
+
     pub fn as_v2(&self) -> ResourceReferenceFlagsV2 {
         match self {
             ResourceReferenceFlags::V2(b) => *b,

@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use rpkg_rs::resource::partition_manager::PartitionManager;
 use rpkg_rs::WoaVersion;
 
-fn test_game(path_env_var: &str, game_version: WoaVersion) -> Result<(), Box<dyn std::error::Error>> {
+fn test_game_mounting(path_env_var: &str, game_version: WoaVersion) -> Result<(), Box<dyn std::error::Error>> {
     // Read game path from env variable
     let game_retail_path = match std::env::var(path_env_var) {
         Ok(path) => PathBuf::from(path),
@@ -17,7 +17,7 @@ fn test_game(path_env_var: &str, game_version: WoaVersion) -> Result<(), Box<dyn
     )?;
 
     assert!(package_manager.partitions.len() > 0);
-    
+
     let packages = package_manager.partitions.iter().map(|p| p.packages.len()).sum::<usize>();
     assert!(packages > 0);
     
@@ -26,18 +26,18 @@ fn test_game(path_env_var: &str, game_version: WoaVersion) -> Result<(), Box<dyn
 
 #[test]
 #[ignore]
-fn test_hm2016() -> Result<(), Box<dyn std::error::Error>> {
-    test_game("HM2016_PATH", WoaVersion::HM2016)
+fn test_hm2016_mounting() -> Result<(), Box<dyn std::error::Error>> {
+    test_game_mounting("HM2016_PATH", WoaVersion::HM2016)
 }
 
 #[test]
 #[ignore]
-fn test_hm2() -> Result<(), Box<dyn std::error::Error>> {
-    test_game("HM2_PATH", WoaVersion::HM2)
+fn test_hm2_mounting() -> Result<(), Box<dyn std::error::Error>> {
+    test_game_mounting("HM2_PATH", WoaVersion::HM2)
 }
 
 #[test]
 #[ignore]
-fn test_hm3() -> Result<(), Box<dyn std::error::Error>> {
-    test_game("HM3_PATH", WoaVersion::HM3)
+fn test_hm3_mounting() -> Result<(), Box<dyn std::error::Error>> {
+    test_game_mounting("HM3_PATH", WoaVersion::HM3)
 }

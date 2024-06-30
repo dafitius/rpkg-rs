@@ -73,8 +73,13 @@ fn main() {
                 continue;
             }
 
-            builder.build(package.version(), is_patch, output_path.join(&output_name).as_path()).unwrap_or_else(|e| {
-                eprintln!("failed to build packag '{}': {}", output_name, e);
+            builder.build(
+                package.version(), 
+                output_path.join(&output_name).as_path(),
+                is_patch,
+                package.has_legacy_references(),
+            ).unwrap_or_else(|e| {
+                eprintln!("failed to build package '{}': {}", output_name, e);
                 std::process::exit(0);
             });
         }

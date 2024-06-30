@@ -1,7 +1,7 @@
 use std::str::FromStr;
 use rpkg_rs::misc::resource_id::ResourceID;
 use rpkg_rs::resource::package_builder::{PackageBuilder, PackageResourceBuilder};
-use rpkg_rs::resource::resource_package::{ChunkType, PackageVersion, ResourcePackage, ResourceReferenceFlagsV2};
+use rpkg_rs::resource::resource_package::{ChunkType, PackageVersion, ResourcePackage, ResourceReferenceFlags, ResourceReferenceFlagsV2};
 use rpkg_rs::resource::runtime_resource_id::RuntimeResourceID;
 
 #[test]
@@ -20,21 +20,21 @@ fn test_build_simple_package_v2() -> Result<(), Box<dyn std::error::Error>> {
         let fake_data: Vec<u8> = (0..1024).map(|j| (i * j) as u8).collect();
 
         // Create a resource from memory and add it to the package.
-        let mut resource = PackageResourceBuilder::from_memory(rrid, "TEMP", fake_data)?;
+        let mut resource = PackageResourceBuilder::from_memory(rrid, "TEMP", fake_data, None, false)?;
 
         // Add references to the resource.
         if i == 0 {
-            resource.with_reference(RuntimeResourceID::from(0x00123456789ABCDE), ResourceReferenceFlagsV2::new().with_language_code(0x1F));
+            resource.with_reference(RuntimeResourceID::from(0x00123456789ABCDE), ResourceReferenceFlags::V2(ResourceReferenceFlagsV2::new().with_language_code(0x1F)));
         } else {
-            resource.with_reference(RuntimeResourceID::from(0x0069696969696969), ResourceReferenceFlagsV2::new().with_language_code(0x06));
-            resource.with_reference(RuntimeResourceID::from(0x0042042042042042), ResourceReferenceFlagsV2::new().with_language_code(0x09).with_runtime_acquired(true));
+            resource.with_reference(RuntimeResourceID::from(0x0069696969696969), ResourceReferenceFlags::V2(ResourceReferenceFlagsV2::new().with_language_code(0x06)));
+            resource.with_reference(RuntimeResourceID::from(0x0042042042042042), ResourceReferenceFlags::V2(ResourceReferenceFlagsV2::new().with_language_code(0x09).with_runtime_acquired(true)));
         }
 
         builder.with_resource(resource);
     }
 
     // Build the package in memory.
-    let package_data = builder.build_in_memory(PackageVersion::RPKGv2, false)?;
+    let package_data = builder.build_in_memory(PackageVersion::RPKGv2, false, false)?;
 
     // Now let's try to parse it again.
     let package = ResourcePackage::from_memory(package_data, false)?;

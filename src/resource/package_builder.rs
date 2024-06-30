@@ -11,7 +11,7 @@ use binrw::meta::WriteEndian;
 use indexmap::{IndexMap, IndexSet};
 use thiserror::Error;
 
-use crate::resource::resource_package::{ChunkType, PackageHeader, PackageMetadata, PackageOffsetFlags, PackageOffsetInfo, PackageVersion, ResourceHeader, ResourcePackage, ResourcePackageSource, ResourceReferenceCountAndFlags, ResourceReferenceFlagsV2};
+use crate::resource::resource_package::{ChunkType, PackageHeader, PackageMetadata, PackageOffsetFlags, PackageOffsetInfo, PackageVersion, ResourceHeader, ResourcePackage, ResourcePackageSource, ResourceReferenceCountAndFlags, ResourceReferenceFlags};
 use crate::resource::runtime_resource_id::RuntimeResourceID;
 
 enum PackageResourceBlob {
@@ -44,7 +44,7 @@ pub struct PackageResourceBuilder {
     system_memory_requirement: u32,
     video_memory_requirement: u32,
     // We store references in a vector because their order is important and there can be duplicates.
-    references: Vec<(RuntimeResourceID, ResourceReferenceFlagsV2)>,
+    references: Vec<(RuntimeResourceID, ResourceReferenceFlags)>
 }
 
 #[derive(Debug, Error)]
@@ -189,7 +189,7 @@ impl PackageResourceBuilder {
     /// # Arguments
     /// * `rrid` - The resource ID of the reference.
     /// * `flags` - The flags of the reference.
-    pub fn with_reference(&mut self, rrid: RuntimeResourceID, flags: ResourceReferenceFlagsV2) -> &mut Self {
+    pub fn with_reference(&mut self, rrid: RuntimeResourceID, flags: ResourceReferenceFlags) -> &mut Self {
         self.references.push((rrid, flags));
         self
     }
@@ -326,7 +326,7 @@ impl PackageBuilder {
             builder.with_memory_requirements(resource.system_memory_requirement(), resource.video_memory_requirement());
 
             for (rrid, flags) in resource.references() {
-                builder.with_reference(*rrid, flags.as_v2());
+                builder.with_reference(*rrid, *flags);
             }
 
             package.with_resource(builder);
@@ -412,7 +412,7 @@ impl PackageBuilder {
     }
 
     /// Writes the metadata table to the given writer.
-    fn write_metadata_table<W: Write + Read + Seek>(&self, writer: &mut W) -> Result<MetadataTableResult, PackageBuilderError> {
+    fn write_metadata_table<W: Write + Read + Seek>(&self, writer: &mut W, legacy_references: bool) -> Result<MetadataTableResult, PackageBuilderError> {
         let metadata_table_start = writer.stream_position().map_err(PackageBuilderError::IoError)?;
 
         for (_, resource) in &self.resources {
@@ -433,24 +433,36 @@ impl PackageBuilder {
             resource_metadata.write(writer).map_err(PackageBuilderError::SerializationError)?;
 
             // Write the references table if there are any.
-            // We always write these in the new format.
             if !resource.references.is_empty() {
                 let reference_table_start = writer.stream_position().map_err(PackageBuilderError::IoError)?;
 
                 let reference_count_and_flags =
                     ResourceReferenceCountAndFlags::new()
                         .with_reference_count(resource.references.len() as u32)
-                        .with_is_new_format(true)
+                        .with_is_new_format(!legacy_references)
                         .with_always_true(true);
 
                 reference_count_and_flags.write(writer).map_err(PackageBuilderError::SerializationError)?;
 
-                for (_, flags) in &resource.references {
-                    flags.write(writer).map_err(PackageBuilderError::SerializationError)?;
+                // In legacy mode, we write resource ids first, then flags.
+                // In new mode, we do the opposite. We also use the appropriate version of the flags.
+                if legacy_references {
+                    for (rrid, _) in &resource.references {
+                        rrid.write(writer).map_err(PackageBuilderError::SerializationError)?;
+                    }
+                    
+                    for (_, flags) in &resource.references {
+                        flags.as_v1().write(writer).map_err(PackageBuilderError::SerializationError)?;
+                    }
                 }
+                else {
+                    for (_, flags) in &resource.references {
+                        flags.as_v2().write(writer).map_err(PackageBuilderError::SerializationError)?;
+                    }
 
-                for (rrid, _) in &resource.references {
-                    rrid.write(writer).map_err(PackageBuilderError::SerializationError)?;
+                    for (rrid, _) in &resource.references {
+                        rrid.write(writer).map_err(PackageBuilderError::SerializationError)?;
+                    }
                 }
 
                 let reference_table_end = writer.stream_position().map_err(PackageBuilderError::IoError)?;
@@ -480,7 +492,13 @@ impl PackageBuilder {
     }
 
     /// Builds the package, writing it to the given writer.
-    fn build_internal<W: Write + Read + Seek>(&self, version: PackageVersion, is_patch: bool, writer: &mut W) -> Result<(), PackageBuilderError> {
+    fn build_internal<W: Write + Read + Seek>(
+        &self, 
+        version: PackageVersion, 
+        writer: &mut W, 
+        is_patch: bool, 
+        legacy_references: bool,
+    ) -> Result<(), PackageBuilderError> {
         // Perform some basic validation.
         if !self.unneeded_resources.is_empty() && !is_patch {
             return Err(PackageBuilderError::UnneededResourcesNotSupported);
@@ -521,7 +539,7 @@ impl PackageBuilder {
         header.write_args(writer, (is_patch,)).map_err(PackageBuilderError::SerializationError)?;
 
         let offset_table_result = self.write_offset_table(writer)?;
-        let metadata_table_result = self.write_metadata_table(writer)?;
+        let metadata_table_result = self.write_metadata_table(writer, legacy_references)?;
 
         // Now that we're done writing the tables, let's patch the header.
         header.header.offset_table_size = offset_table_result.offset_table_size;
@@ -580,11 +598,12 @@ impl PackageBuilder {
     ///
     /// # Arguments
     /// * `version` - The version of the package to build.
-    /// * `is_patch` - Whether the package is a patch package.
     /// * `output_path` - The path to the output file.
-    pub fn build(self, version: PackageVersion, is_patch: bool, output_path: &Path) -> Result<(), PackageBuilderError> {
+    /// * `is_patch` - Whether the package is a patch package.
+    /// * `legacy_references` - Whether to use the legacy references format.
+    pub fn build(self, version: PackageVersion, output_path: &Path, is_patch: bool, legacy_references: bool) -> Result<(), PackageBuilderError> {
         let mut file = File::create(output_path).map_err(PackageBuilderError::IoError)?;
-        self.build_internal(version, is_patch, &mut file)
+        self.build_internal(version, &mut file, is_patch, legacy_references)
     }
 
     /// Builds the package for the given version and returns it as a byte vector.
@@ -592,9 +611,10 @@ impl PackageBuilder {
     /// # Arguments
     /// * `version` - The version of the package to build.
     /// * `is_patch` - Whether the package is a patch package.
-    pub fn build_in_memory(self, version: PackageVersion, is_patch: bool) -> Result<Vec<u8>, PackageBuilderError> {
+    /// * `legacy_references` - Whether to use the legacy references format.
+    pub fn build_in_memory(self, version: PackageVersion, is_patch: bool, legacy_references: bool) -> Result<Vec<u8>, PackageBuilderError> {
         let mut writer = Cursor::new(vec![]);
-        self.build_internal(version, is_patch, &mut writer)?;
+        self.build_internal(version, &mut writer, is_patch, legacy_references)?;
         Ok(writer.into_inner())
     }
 }
