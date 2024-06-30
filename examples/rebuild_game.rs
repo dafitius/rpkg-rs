@@ -1,8 +1,9 @@
-use std::env;
+use std::{env, fs, io};
 use std::path::PathBuf;
-
+use md5::{Digest, Md5};
 use rpkg_rs::resource::package_builder::PackageBuilder;
 use rpkg_rs::resource::partition_manager::PartitionManager;
+use rpkg_rs::resource::resource_package::ResourcePackageSource;
 use rpkg_rs::resource::resource_partition::PatchId;
 use rpkg_rs::WoaVersion;
 
@@ -68,13 +69,9 @@ fn main() {
                 },
                 _ => false,
             };
-            
-            if !is_patch {
-                continue;
-            }
 
             builder.build(
-                package.version(), 
+                package.version(),
                 output_path.join(&output_name).as_path(),
                 is_patch,
                 package.has_legacy_references(),
@@ -82,6 +79,37 @@ fn main() {
                 eprintln!("failed to build package '{}': {}", output_name, e);
                 std::process::exit(0);
             });
+
+            // After it's built, check if the generated file is the same as the original.
+            let original_file = match &package.source {
+                Some(ResourcePackageSource::File(path)) => path,
+                _ => panic!("Package '{}' of game '{:?}' has no source", output_name, game_version),
+            };
+
+            let generated_file = output_path.join(&output_name);
+
+            if original_file.metadata().unwrap().len() != generated_file.metadata().unwrap().len() {
+                panic!("File size mismatch for package '{}' of game '{:?}'", output_name, game_version);
+            }
+
+            // Hash the files and compare them.
+            let original_hash = {
+                let mut file = fs::File::open(original_file).unwrap();
+                let mut hasher = Md5::new();
+                io::copy(&mut file, &mut hasher).unwrap();
+                hasher.finalize()
+            };
+
+            let generated_hash = {
+                let mut file = fs::File::open(&generated_file).unwrap();
+                let mut hasher = Md5::new();
+                io::copy(&mut file, &mut hasher).unwrap();
+                hasher.finalize()
+            };
+
+            if original_hash != generated_hash {
+                panic!("Hash mismatch for package '{}' of game '{:?}'", output_name, game_version);
+            }
         }
     }
 
