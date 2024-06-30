@@ -27,6 +27,7 @@ rayon = { version = "1.10.0", optional = true}
 serde = { version = "1.0.199", optional = true, features = ["derive"] }
 serde-hex = { version = "0.1.0", optional = true }
 indexmap = "2.2.6"
+tempfile = "3.10.1"
 
 [features]
 default = ["path-list", "serde"]

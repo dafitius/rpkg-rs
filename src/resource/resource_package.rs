@@ -49,7 +49,7 @@ pub enum PackageVersion {
 #[brw(little, import(is_patch: bool))]
 pub struct ResourcePackage {
     #[brw(ignore)]
-    pub(crate) source: Option<ResourcePackageSource>,
+    pub source: Option<ResourcePackageSource>,
 
     pub(crate) magic: [u8; 4],
 
