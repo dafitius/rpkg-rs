@@ -10,7 +10,7 @@ use binrw::meta::WriteEndian;
 use indexmap::{IndexMap, IndexSet};
 use thiserror::Error;
 
-use crate::resource::resource_package::{ChunkType, PackageHeader, PackageMetadata, PackageOffsetInfo, PackageVersion, ResourceHeader, ResourcePackage, ResourcePackageSource, ResourceReferenceCountAndFlags, ResourceReferenceFlagsV2};
+use crate::resource::resource_package::{ChunkType, PackageHeader, PackageMetadata, PackageOffsetFlags, PackageOffsetInfo, PackageVersion, ResourceHeader, ResourcePackage, ResourcePackageSource, ResourceReferenceCountAndFlags, ResourceReferenceFlagsV2};
 use crate::resource::runtime_resource_id::RuntimeResourceID;
 
 enum PackageResourceBlob {
@@ -325,7 +325,7 @@ impl PackageBuilder {
             let resource_entry = PackageOffsetInfo {
                 runtime_resource_id: rrid.clone(),
                 data_offset: 0,
-                compressed_size_and_is_scrambled_flag: 0,
+                flags: PackageOffsetFlags::new(),
             };
 
             resource_entry.write(writer).map_err(PackageBuilderError::SerializationError)?;

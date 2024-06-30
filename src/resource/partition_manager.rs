@@ -260,7 +260,7 @@ impl PartitionManager {
 
             let size = |info: &ResourceInfo| {
                 info.compressed_size()
-                    .unwrap_or(info.header.data_size as usize)
+                    .unwrap_or(info.header.data_size)
             };
 
             let changes = partition.resource_patch_indices(rrid);

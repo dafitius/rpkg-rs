@@ -82,11 +82,7 @@ fn resource_parser(file_count: u32) -> BinResult<IndexMap<RuntimeResourceID, Res
     let mut map = IndexMap::new();
     let mut resource_entries = vec![];
     for _ in 0..file_count {
-        resource_entries.push(PackageOffsetInfo {
-            runtime_resource_id: u64::read_options(reader, endian, ())?.into(),
-            data_offset: u64::read_options(reader, endian, ())?,
-            compressed_size_and_is_scrambled_flag: u32::read_options(reader, endian, ())?,
-        });
+        resource_entries.push(PackageOffsetInfo::read_options(reader, endian, ())?);
     }
 
     let mut resource_metadata = vec![];
@@ -192,7 +188,7 @@ impl ResourcePackage {
 
         let final_size = resource
             .compressed_size()
-            .unwrap_or(resource.header.data_size as usize);
+            .unwrap_or(resource.header.data_size);
 
         let is_lz4ed = resource.is_compressed();
         let is_scrambled = resource.is_scrambled();
@@ -203,7 +199,7 @@ impl ResourcePackage {
                 let mut file = File::open(package_path).map_err(ResourcePackageError::IoError)?;
                 file.seek(io::SeekFrom::Start(resource.entry.data_offset)).map_err(ResourcePackageError::IoError)?;
                 
-                let mut buffer = vec![0; final_size];
+                let mut buffer = vec![0; final_size as usize];
                 file.read_exact(&mut buffer).map_err(ResourcePackageError::IoError)?;
                 buffer
             }
@@ -265,6 +261,16 @@ pub struct PackageHeader {
     pub metadata_table_size: u32,
 }
 
+#[bitfield]
+#[binrw]
+#[br(map = Self::from_bytes)]
+#[bw(map = |&x| Self::into_bytes(x))]
+#[derive(Copy, Clone, Eq, PartialEq)]
+pub struct PackageOffsetFlags {
+    pub compressed_size: B31,
+    pub is_scrambled: bool,
+}
+
 #[allow(dead_code)]
 #[derive(Copy, Clone)]
 #[binrw]
@@ -272,16 +278,16 @@ pub struct PackageHeader {
 pub struct PackageOffsetInfo {
     pub(crate) runtime_resource_id: RuntimeResourceID,
     pub(crate) data_offset: u64,
-    pub(crate) compressed_size_and_is_scrambled_flag: u32,
+    pub(crate) flags: PackageOffsetFlags,
 }
 
 impl PackageOffsetInfo {
     pub fn is_scrambled(&self) -> bool {
-        self.compressed_size_and_is_scrambled_flag & 0x80000000 == 0x80000000
+        self.flags.is_scrambled()
     }
 
-    pub fn compressed_size(&self) -> Option<usize> {
-        match (self.compressed_size_and_is_scrambled_flag & 0x7FFFFFFF) as usize {
+    pub fn compressed_size(&self) -> Option<u32> {
+        match self.flags.compressed_size() {
             0 => None,
             n => Some(n),
         }
@@ -453,7 +459,7 @@ impl fmt::Display for PackageOffsetInfo {
             f,
             "resource {} is {} bytes at {}",
             self.runtime_resource_id.to_hex_string(),
-            self.compressed_size_and_is_scrambled_flag & 0x3FFFFFFF,
+            self.flags.compressed_size(),
             self.data_offset
         )
     }

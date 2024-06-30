@@ -47,7 +47,7 @@ impl ResourceInfo {
     }
 
     /// will return None is the resource is not compressed
-    pub fn compressed_size(&self) -> Option<usize> {
+    pub fn compressed_size(&self) -> Option<u32> {
         self.entry.compressed_size()
     }
 
