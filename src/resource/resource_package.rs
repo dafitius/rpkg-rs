@@ -11,6 +11,7 @@ use std::io::{Cursor, Read, Seek};
 use std::iter::zip;
 use std::path::{Path, PathBuf};
 use std::{fmt, io};
+use indexmap::IndexMap;
 use thiserror::Error;
 
 use crate::resource::runtime_resource_id::RuntimeResourceID;
@@ -73,12 +74,12 @@ pub struct ResourcePackage {
 
     #[br(parse_with = resource_parser, args(header.file_count))]
     #[bw(write_with = empty_writer)]
-    pub resources: HashMap<RuntimeResourceID, ResourceInfo>,
+    pub resources: IndexMap<RuntimeResourceID, ResourceInfo>,
 }
 
 #[parser(reader: reader, endian)]
-fn resource_parser(file_count: u32) -> BinResult<HashMap<RuntimeResourceID, ResourceInfo>> {
-    let mut map = HashMap::new();
+fn resource_parser(file_count: u32) -> BinResult<IndexMap<RuntimeResourceID, ResourceInfo>> {
+    let mut map = IndexMap::new();
     let mut resource_entries = vec![];
     for _ in 0..file_count {
         resource_entries.push(PackageOffsetInfo {

@@ -7,6 +7,7 @@ use binrw::__private::Required;
 use binrw::BinWrite;
 use binrw::io::Cursor;
 use binrw::meta::WriteEndian;
+use indexmap::{IndexMap, IndexSet};
 use thiserror::Error;
 
 use crate::resource::resource_package::{ChunkType, PackageHeader, PackageMetadata, PackageOffsetInfo, PackageVersion, ResourceHeader, ResourcePackage, ResourcePackageSource, ResourceReferenceCountAndFlags, ResourceReferenceFlagsV2};
@@ -159,8 +160,8 @@ pub struct PackageBuilder {
     chunk_id: u8,
     chunk_type: ChunkType,
     patch_id: u8,
-    resources: HashMap<RuntimeResourceID, PackageResourceBuilder>,
-    unneeded_resources: HashSet<RuntimeResourceID>,
+    resources: IndexMap<RuntimeResourceID, PackageResourceBuilder>,
+    unneeded_resources: IndexSet<RuntimeResourceID>,
 }
 
 #[derive(Debug, Error)]
@@ -213,8 +214,8 @@ impl PackageBuilder {
             chunk_id,
             chunk_type,
             patch_id: 0,
-            resources: HashMap::new(),
-            unneeded_resources: HashSet::new(),
+            resources: IndexMap::new(),
+            unneeded_resources: IndexSet::new(),
         }
     }
 
@@ -229,8 +230,8 @@ impl PackageBuilder {
             chunk_id: resource_package.metadata.as_ref().map(|m| m.chunk_id).unwrap_or(0),
             chunk_type: resource_package.metadata.as_ref().map(|m| m.chunk_type).unwrap_or(ChunkType::Standard),
             patch_id: resource_package.metadata.as_ref().map(|m| m.patch_id).unwrap_or(0),
-            resources: HashMap::new(),
-            unneeded_resources: HashSet::new(),
+            resources: IndexMap::new(),
+            unneeded_resources: IndexSet::new(),
         };
 
         for (rrid, resource) in &resource_package.resources {
@@ -447,7 +448,7 @@ impl PackageBuilder {
             },
             unneeded_resource_count: self.unneeded_resources.len() as u32,
             unneeded_resources: Some(self.unneeded_resources.iter().map(|rrid| rrid.clone()).collect()),
-            resources: HashMap::new(),
+            resources: IndexMap::new(),
         };
 
         // Write the header and the tables.
