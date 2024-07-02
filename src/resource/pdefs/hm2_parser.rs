@@ -3,8 +3,8 @@ use crate::misc::resource_id::ResourceID;
 use crate::resource::pdefs::{
     PackageDefinitionError, PackageDefinitionParser, PartitionId, PartitionInfo, PartitionType,
 };
-use std::str::FromStr;
 use lazy_regex::regex;
+use std::str::FromStr;
 
 pub struct HM2Parser;
 

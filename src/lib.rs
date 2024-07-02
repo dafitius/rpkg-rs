@@ -47,10 +47,7 @@ pub trait GlacierResource: Sized {
         data: R,
     ) -> Result<Self::Output, GlacierResourceError>;
 
-    fn serialize(
-        &self,
-        woa_version: WoaVersion,
-    ) -> Result<Vec<u8>, GlacierResourceError>;
+    fn serialize(&self, woa_version: WoaVersion) -> Result<Vec<u8>, GlacierResourceError>;
 
     fn resource_type(&self) -> [u8; 4];
     fn video_memory_requirement(&self) -> u64;

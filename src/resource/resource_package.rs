@@ -1,7 +1,9 @@
 use crate::resource::resource_info::ResourceInfo;
 use crate::resource::resource_package::ReferenceType::{INSTALL, NORMAL, WEAK};
-use binrw::{parser, BinRead, BinReaderExt, BinResult, binrw};
+use binrw::{binrw, parser, BinRead, BinReaderExt, BinResult};
+use indexmap::IndexMap;
 use itertools::Itertools;
+use lzzzz::lz4;
 use memmap2::Mmap;
 use modular_bitfield::prelude::*;
 use std::fs::File;
@@ -9,8 +11,6 @@ use std::io::{Cursor, Read, Seek};
 use std::iter::zip;
 use std::path::{Path, PathBuf};
 use std::{fmt, io};
-use indexmap::IndexMap;
-use lzzzz::lz4;
 use thiserror::Error;
 
 use crate::resource::runtime_resource_id::RuntimeResourceID;
@@ -62,10 +62,10 @@ pub struct ResourcePackage {
 
     pub header: PackageHeader,
 
-    #[brw(if (is_patch))]
+    #[brw(if(is_patch))]
     pub(crate) unneeded_resource_count: u32,
 
-    #[brw(if (is_patch))]
+    #[brw(if(is_patch))]
     #[br(count = unneeded_resource_count, map = |ids: Vec<u64>| {
     match unneeded_resource_count{
         0 => None,
@@ -155,19 +155,12 @@ impl ResourcePackage {
 
     /// Returns whether the package uses the legacy references format.
     pub fn has_legacy_references(&self) -> bool {
-        self.resources
-            .iter()
-            .any(|(_, resource)| {
-                resource
-                    .references()
-                    .iter()
-                    .any(|(_, flags)| {
-                        match flags {
-                            ResourceReferenceFlags::V1(_) => true,
-                            ResourceReferenceFlags::V2(_) => false,
-                        }
-                    })
+        self.resources.iter().any(|(_, resource)| {
+            resource.references().iter().any(|(_, flags)| match flags {
+                ResourceReferenceFlags::V1(_) => true,
+                ResourceReferenceFlags::V2(_) => false,
             })
+        })
     }
 
     /// Returns whether the given resource is an unneeded resource.
@@ -196,10 +189,7 @@ impl ResourcePackage {
     ///
     /// # Arguments
     /// * `rrid` - The resource ID of the resource to read.
-    pub fn read_resource(
-        &self,
-        rrid: &RuntimeResourceID,
-    ) -> Result<Vec<u8>, ResourcePackageError> {
+    pub fn read_resource(&self, rrid: &RuntimeResourceID) -> Result<Vec<u8>, ResourcePackageError> {
         let resource = self
             .resources
             .get(rrid)
@@ -216,10 +206,12 @@ impl ResourcePackage {
         let mut buffer = match &self.source {
             Some(ResourcePackageSource::File(package_path)) => {
                 let mut file = File::open(package_path).map_err(ResourcePackageError::IoError)?;
-                file.seek(io::SeekFrom::Start(resource.entry.data_offset)).map_err(ResourcePackageError::IoError)?;
+                file.seek(io::SeekFrom::Start(resource.entry.data_offset))
+                    .map_err(ResourcePackageError::IoError)?;
 
                 let mut buffer = vec![0; final_size as usize];
-                file.read_exact(&mut buffer).map_err(ResourcePackageError::IoError)?;
+                file.read_exact(&mut buffer)
+                    .map_err(ResourcePackageError::IoError)?;
                 buffer
             }
 
@@ -436,7 +428,7 @@ impl ResourceReferenceFlags {
                     NORMAL
                 }
             }
-            ResourceReferenceFlags::V2(b) => b.reference_type()
+            ResourceReferenceFlags::V2(b) => b.reference_type(),
         }
     }
 }

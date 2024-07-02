@@ -1,9 +1,12 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use itertools::Itertools;
 use thiserror::Error;
 
-use crate::resource::pdefs::{GameDiscoveryError, GamePaths, PackageDefinitionError, PackageDefinitionSource, PartitionId, PartitionInfo};
+use crate::resource::pdefs::{
+    GameDiscoveryError, GamePaths, PackageDefinitionError, PackageDefinitionSource, PartitionId,
+    PartitionInfo,
+};
 use crate::resource::resource_info::ResourceInfo;
 use crate::resource::runtime_resource_id::RuntimeResourceID;
 use crate::WoaVersion;
@@ -20,7 +23,7 @@ pub enum PackageManagerError {
 
     #[error("partition {0} could not be found")]
     PartitionNotFound(String),
-    
+
     #[error("Could not discover game paths: {0}")]
     GameDiscoveryError(#[from] GameDiscoveryError),
 }
@@ -41,20 +44,25 @@ pub struct PartitionManager {
 
 impl PartitionManager {
     /// Create a new PartitionManager for the game at the given path, and a custom package definition.
-    /// 
+    ///
     /// # Arguments
     /// - `runtime_directory` - The path to the game's runtime directory.
     /// - `package_definition` - The package definition to use.
-    pub fn new(runtime_directory: PathBuf, package_definition: PackageDefinitionSource) -> Result<Self, PackageManagerError> {
-        let partition_infos = package_definition.read().map_err(|e| PackageManagerError::PackageDefinitionError(e))?;
-        
+    pub fn new(
+        runtime_directory: PathBuf,
+        package_definition: &PackageDefinitionSource,
+    ) -> Result<Self, PackageManagerError> {
+        let partition_infos = package_definition
+            .read()
+            .map_err(PackageManagerError::PackageDefinitionError)?;
+
         Ok(Self {
             runtime_directory,
             partition_infos,
             partitions: vec![],
         })
     }
-    
+
     /// Create a new PartitionManager by mounting the game at the given path.
     ///
     /// # Arguments
@@ -72,14 +80,17 @@ impl PartitionManager {
         F: FnMut(usize, &PartitionState),
     {
         let game_paths = GamePaths::from_retail_directory(retail_directory)?;
-        let package_definition = PackageDefinitionSource::from_file(game_paths.package_definition_path, game_version)?;
+        let package_definition =
+            PackageDefinitionSource::from_file(game_paths.package_definition_path, game_version)?;
 
         // And read all the partition infos.
-        let partition_infos = package_definition.read().map_err(|e| PackageManagerError::PackageDefinitionError(e))?;
+        let partition_infos = package_definition
+            .read()
+            .map_err(PackageManagerError::PackageDefinitionError)?;
 
         let mut package_manager = Self {
             runtime_directory: game_paths.runtime_path,
-            partition_infos: partition_infos,
+            partition_infos,
             partitions: vec![],
         };
 
@@ -92,7 +103,7 @@ impl PartitionManager {
     }
 
     fn try_read_partition<F>(
-        runtime_directory: &PathBuf,
+        runtime_directory: &Path,
         partition_info: PartitionInfo,
         mut progress_callback: F,
     ) -> Result<Option<ResourcePartition>, PackageManagerError>
@@ -112,7 +123,7 @@ impl PartitionManager {
         };
 
         partition
-            .mount_resource_packages_in_partition_with_hook(&runtime_directory, callback)
+            .mount_resource_packages_in_partition_with_hook(runtime_directory, callback)
             .map_err(|e| PackageManagerError::PartitionError(partition_info.id(), e))?;
 
         if state_result.mounted {
@@ -133,7 +144,8 @@ impl PartitionManager {
     where
         F: FnMut(usize, &PartitionState),
     {
-        let partitions = self.partition_infos
+        let partitions = self
+            .partition_infos
             .iter()
             .enumerate()
             .map(|(index, partition_info)| {
@@ -145,7 +157,7 @@ impl PartitionManager {
             })
             .collect::<Result<Vec<Option<ResourcePartition>>, PackageManagerError>>()?
             .into_iter()
-            .filter_map(|x| x)
+            .flatten()
             .collect::<Vec<ResourcePartition>>();
 
         for partition in partitions {
@@ -168,10 +180,11 @@ impl PartitionManager {
     where
         F: FnMut(&PartitionState),
     {
-        match Self::try_read_partition(&self.runtime_directory, partition_info, progress_callback)? {
-            Some(partition) => self.partitions.push(partition),
-            None => {}
-        };
+        if let Some(partition) =
+            Self::try_read_partition(&self.runtime_directory, partition_info, progress_callback)?
+        {
+            self.partitions.push(partition)
+        }
 
         Ok(())
     }
@@ -185,7 +198,7 @@ impl PartitionManager {
             .partitions
             .iter()
             .find(|partition| partition.partition_info().id() == partition_id);
-        
+
         if let Some(partition) = partition {
             match partition.read_resource(&rrid) {
                 Ok(data) => Ok(data),
@@ -239,7 +252,7 @@ impl PartitionManager {
             .partitions
             .iter()
             .find(|partition| partition.partition_info().id() == *partition_id);
-        
+
         if let Some(partition) = partition {
             match partition.get_resource_info(rrid) {
                 Ok(info) => Ok(info),
@@ -258,10 +271,8 @@ impl PartitionManager {
         for partition in &self.partitions {
             let mut last_occurence: Option<&ResourceInfo> = None;
 
-            let size = |info: &ResourceInfo| {
-                info.compressed_size()
-                    .unwrap_or(info.header.data_size)
-            };
+            let size =
+                |info: &ResourceInfo| info.compressed_size().unwrap_or(info.header.data_size);
 
             let changes = partition.resource_patch_indices(rrid);
             let deletions = partition.resource_removal_indices(rrid);
@@ -270,7 +281,7 @@ impl PartitionManager {
                 .into_iter()
                 .chain(deletions.clone().into_iter())
                 .collect::<Vec<PatchId>>();
-            
+
             for occurence in occurrences.iter().sorted() {
                 println!(
                     "{}: {}",
@@ -289,7 +300,7 @@ impl PartitionManager {
                     println!("\t- Removal: resource deleted");
                     last_occurence = None;
                 }
-                
+
                 if changes.contains(occurence) {
                     if let Ok(info) = partition.resource_info_from(rrid, *occurence) {
                         if let Some(last_info) = last_occurence {

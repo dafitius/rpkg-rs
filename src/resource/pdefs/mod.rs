@@ -244,8 +244,12 @@ impl PackageDefinitionSource {
     /// # Arguments
     /// - `path` - The path to the packagedefinition.txt file.
     /// - `game_version` - The version of the game.
-    pub fn from_file(path: PathBuf, game_version: WoaVersion) -> Result<Self, PackageDefinitionError> {
-        let package_definition_data = std::fs::read(path.as_path()).map_err(|e| PackageDefinitionError::FailedToRead(e))?;
+    pub fn from_file(
+        path: PathBuf,
+        game_version: WoaVersion,
+    ) -> Result<Self, PackageDefinitionError> {
+        let package_definition_data =
+            std::fs::read(path.as_path()).map_err(PackageDefinitionError::FailedToRead)?;
 
         let package_definition = match game_version {
             WoaVersion::HM2016 => PackageDefinitionSource::HM2016(package_definition_data),
@@ -296,18 +300,27 @@ impl GamePaths {
         let thumbs_path = retail_directory.join("thumbs.dat");
 
         // Parse the thumbs file, so we can find the runtime path.
-        let thumbs = IniFileSystem::from(&thumbs_path.as_path()).map_err(|e| GameDiscoveryError::FailedToParseThumbsFile(e))?;
+        let thumbs = IniFileSystem::from(thumbs_path.as_path())
+            .map_err(GameDiscoveryError::FailedToParseThumbsFile)?;
 
         let app_options = &thumbs.root()["application"];
-        let project_path = app_options.options().get("PROJECT_PATH").ok_or(GameDiscoveryError::NoProjectPath)?;
-        let relative_runtime_path = app_options.options().get("RUNTIME_PATH").ok_or(GameDiscoveryError::NoRuntimePath)?;
-        let runtime_path = retail_directory.join(project_path).join(relative_runtime_path);
+        let project_path = app_options
+            .options()
+            .get("PROJECT_PATH")
+            .ok_or(GameDiscoveryError::NoProjectPath)?;
+        let relative_runtime_path = app_options
+            .options()
+            .get("RUNTIME_PATH")
+            .ok_or(GameDiscoveryError::NoRuntimePath)?;
+        let runtime_path = retail_directory
+            .join(project_path)
+            .join(relative_runtime_path);
         let package_definition_path = runtime_path.join("packagedefinition.txt");
 
         Ok(Self {
             project_path: retail_directory.join(project_path),
             runtime_path,
             package_definition_path,
-        })        
+        })
     }
 }

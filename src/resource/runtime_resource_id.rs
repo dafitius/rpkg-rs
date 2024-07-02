@@ -2,12 +2,12 @@
 //! Can be derived from a [ResourceID] md5 digest
 
 use crate::misc::resource_id::ResourceID;
+use binrw::binrw;
 use md5::{Digest, Md5};
 use std::fmt;
 use std::fmt::{Debug, Formatter};
 use std::hash::Hash;
 use thiserror::Error;
-use binrw::binrw;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};

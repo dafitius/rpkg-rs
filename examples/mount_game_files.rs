@@ -1,7 +1,7 @@
-use std::{env, io};
 use std::io::{stdin, Write};
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::{env, io};
 
 use rpkg_rs::misc::resource_id::ResourceID;
 use rpkg_rs::resource::partition_manager::{PartitionManager, PartitionState};
@@ -34,13 +34,15 @@ fn main() {
         eprintln!("failed to discover game paths: {}", e);
         std::process::exit(0);
     });
-    
+
     // Read and parse the package definition.
-    let package_definition_source = PackageDefinitionSource::from_file(game_paths.package_definition_path, game_version).unwrap_or_else(|e| {
-        eprintln!("failed to parse package definition: {}", e);
-        std::process::exit(0);
-    });
-    
+    let package_definition_source =
+        PackageDefinitionSource::from_file(game_paths.package_definition_path, game_version)
+            .unwrap_or_else(|e| {
+                eprintln!("failed to parse package definition: {}", e);
+                std::process::exit(0);
+            });
+
     let mut partition_infos = package_definition_source.read().unwrap_or_else(|e| {
         eprintln!("failed to read package definition: {}", e);
         std::process::exit(0);
@@ -51,10 +53,13 @@ fn main() {
         partition.set_max_patch_level(9);
     }
 
-    let mut package_manager = PartitionManager::new(game_paths.runtime_path, package_definition_source).unwrap_or_else(|e| {
-        eprintln!("failed to init package manager: {}", e);
-        std::process::exit(0);
-    });
+    let mut package_manager =
+        PartitionManager::new(game_paths.runtime_path, package_definition_source).unwrap_or_else(
+            |e| {
+                eprintln!("failed to init package manager: {}", e);
+                std::process::exit(0);
+            },
+        );
 
     let mut last_index = 0;
     let mut progress = 0.0;
@@ -85,10 +90,12 @@ fn main() {
         }
     };
 
-    package_manager.mount_partitions(progress_callback).unwrap_or_else(|e| {
-        eprintln!("failed to mount partitions: {}", e);
-        std::process::exit(0);
-    });
+    package_manager
+        .mount_partitions(progress_callback)
+        .unwrap_or_else(|e| {
+            eprintln!("failed to mount partitions: {}", e);
+            std::process::exit(0);
+        });
 
     loop {
         print!("enter a ResourceID > ");

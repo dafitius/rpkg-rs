@@ -231,13 +231,9 @@ impl ResourcePartition {
             .get(&package_index)
             .ok_or(ResourcePartitionError::NotMounted)?;
 
-        rpkg.read_resource(rrid)
-            .map_err(|e| {
-                ResourcePartitionError::ReadResourcePackageError(
-                    e,
-                    self.info.filename(package_index),
-                )
-            })
+        rpkg.read_resource(rrid).map_err(|e| {
+            ResourcePartitionError::ReadResourcePackageError(e, self.info.filename(package_index))
+        })
     }
 
     pub fn read_glacier_resource<T>(
@@ -258,14 +254,9 @@ impl ResourcePartition {
             .get(&package_index)
             .ok_or(ResourcePartitionError::NotMounted)?;
 
-        let bytes = rpkg
-            .read_resource(rrid)
-            .map_err(|e| {
-                ResourcePartitionError::ReadResourcePackageError(
-                    e,
-                    self.info.filename(package_index),
-                )
-            })?;
+        let bytes = rpkg.read_resource(rrid).map_err(|e| {
+            ResourcePartitionError::ReadResourcePackageError(e, self.info.filename(package_index))
+        })?;
 
         T::process_data(woa_version, bytes).map_err(ResourcePartitionError::ResourceError)
     }
@@ -280,10 +271,9 @@ impl ResourcePartition {
             .get(&patch_id)
             .ok_or(ResourcePartitionError::NotMounted)?;
 
-        rpkg.read_resource(rrid)
-            .map_err(|e| {
-                ResourcePartitionError::ReadResourcePackageError(e, self.info.filename(patch_id))
-            })
+        rpkg.read_resource(rrid).map_err(|e| {
+            ResourcePartitionError::ReadResourcePackageError(e, self.info.filename(patch_id))
+        })
     }
 
     pub fn get_resource_info(
@@ -300,7 +290,8 @@ impl ResourcePartition {
             .get(package_index)
             .ok_or(ResourcePartitionError::NotMounted)?;
 
-        rpkg.resources.get(rrid)
+        rpkg.resources
+            .get(rrid)
             .ok_or(ResourcePartitionError::ResourceNotAvailable)
     }
 
@@ -314,7 +305,8 @@ impl ResourcePartition {
             .get(&patch_id)
             .ok_or(ResourcePartitionError::NotMounted)?;
 
-        rpkg.resources.get(rrid)
+        rpkg.resources
+            .get(rrid)
             .ok_or(ResourcePartitionError::ResourceNotAvailable)
     }
 

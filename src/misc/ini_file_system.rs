@@ -109,7 +109,7 @@ impl IniFileSection {
     }
 
     pub fn has_option(&self, option_name: &str) -> bool {
-        self.options.get(option_name).is_some()
+        self.options.contains_key(option_name)
     }
 
     fn set_option(&mut self, option_name: &str, value: &str) {

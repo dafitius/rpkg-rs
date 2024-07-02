@@ -4,39 +4,64 @@ use std::io;
 use std::io::{Read, Seek, Write};
 use std::path::{Path, PathBuf};
 
-use binrw::__private::Required;
+use crate::resource::pdefs::{PartitionId, PartitionType};
+use crate::resource::resource_package::{
+    ChunkType, PackageHeader, PackageMetadata, PackageOffsetFlags, PackageOffsetInfo,
+    PackageVersion, ResourceHeader, ResourcePackage, ResourcePackageSource,
+    ResourceReferenceCountAndFlags, ResourceReferenceFlags,
+};
+use crate::resource::resource_partition::PatchId;
+use crate::resource::runtime_resource_id::RuntimeResourceID;
+use crate::{GlacierResource, GlacierResourceError, WoaVersion};
 use binrw::BinWrite;
+use binrw::__private::Required;
 use binrw::io::Cursor;
 use binrw::meta::WriteEndian;
 use indexmap::{IndexMap, IndexSet};
 use lzzzz::{lz4, lz4_hc};
 use thiserror::Error;
-use crate::{GlacierResource, GlacierResourceError, WoaVersion};
-use crate::resource::pdefs::{PartitionId, PartitionType};
-use crate::resource::resource_package::{ChunkType, PackageHeader, PackageMetadata, PackageOffsetFlags, PackageOffsetInfo, PackageVersion, ResourceHeader, ResourcePackage, ResourcePackageSource, ResourceReferenceCountAndFlags, ResourceReferenceFlags};
-use crate::resource::resource_partition::PatchId;
-use crate::resource::runtime_resource_id::RuntimeResourceID;
 
 enum PackageResourceBlob {
-    FromFile { path: PathBuf, size: u32, compression_level: Option<i32>, should_scramble: bool },
-    FromFileAtOffset { path: PathBuf, offset: u64, size: u32, compressed_size: Option<u32>, is_scrambled: bool },
-    FromMemory { data: Vec<u8>, compression_level: Option<i32>, should_scramble: bool },
-    FromCompressedMemory { data: Vec<u8>, decompressed_size: Option<u32>, is_scrambled: bool },
+    File {
+        path: PathBuf,
+        size: u32,
+        compression_level: Option<i32>,
+        should_scramble: bool,
+    },
+    FileAtOffset {
+        path: PathBuf,
+        offset: u64,
+        size: u32,
+        compressed_size: Option<u32>,
+        is_scrambled: bool,
+    },
+    Memory {
+        data: Vec<u8>,
+        compression_level: Option<i32>,
+        should_scramble: bool,
+    },
+    CompressedMemory {
+        data: Vec<u8>,
+        decompressed_size: Option<u32>,
+        is_scrambled: bool,
+    },
 }
 
 impl PackageResourceBlob {
     /// The (uncompressed) size of the resource blob in bytes.
     pub fn size(&self) -> u32 {
         match self {
-            PackageResourceBlob::FromFile { size, .. } => *size,
-            PackageResourceBlob::FromFileAtOffset { size, .. } => *size,
-            PackageResourceBlob::FromMemory { data, .. } => data.len() as u32,
-            PackageResourceBlob::FromCompressedMemory { data, decompressed_size, .. } => {
-                match decompressed_size {
-                    Some(size) => *size,
-                    None => data.len() as u32,
-                }
-            }
+            PackageResourceBlob::File { size, .. } => *size,
+            PackageResourceBlob::FileAtOffset { size, .. } => *size,
+            PackageResourceBlob::Memory { data, .. } => data.len() as u32,
+            PackageResourceBlob::CompressedMemory {
+                data,
+                decompressed_size,
+                ..
+            } => match decompressed_size {
+                Some(size) => *size,
+                None => data.len() as u32,
+            },
         }
     }
 }
@@ -49,7 +74,7 @@ pub struct PackageResourceBuilder {
     system_memory_requirement: u32,
     video_memory_requirement: u32,
     // We store references in a vector because their order is important and there can be duplicates.
-    references: Vec<(RuntimeResourceID, ResourceReferenceFlags)>
+    references: Vec<(RuntimeResourceID, ResourceReferenceFlags)>,
 }
 
 #[derive(Debug, Error)]
@@ -68,9 +93,9 @@ pub enum PackageResourceBuilderError {
 
     #[error("Resource types must be exactly 4 characters")]
     InvalidResourceType,
-    
+
     #[error("Internal Glacier resource error")]
-    GlacierResourceError(#[from] GlacierResourceError)
+    GlacierResourceError(#[from] GlacierResourceError),
 }
 
 /// A builder for creating a resource within a ResourcePackage.
@@ -102,20 +127,28 @@ impl PackageResourceBuilder {
         compression_level: Option<i32>,
         should_scramble: bool,
     ) -> Result<Self, PackageResourceBuilderError> {
-        let file_size = path.metadata().map_err(PackageResourceBuilderError::IoError)?.len();
+        let file_size = path
+            .metadata()
+            .map_err(PackageResourceBuilderError::IoError)?
+            .len();
 
         if file_size >= u32::MAX as u64 {
             return Err(PackageResourceBuilderError::FileTooLarge);
         }
 
-        return Ok(Self {
+        Ok(Self {
             rrid,
             resource_type: Self::resource_type_to_bytes(resource_type)?,
             system_memory_requirement: file_size as u32,
             video_memory_requirement: u32::MAX,
             references: vec![],
-            blob: PackageResourceBlob::FromFile { path: path.to_path_buf(), size: file_size as u32, compression_level, should_scramble },
-        });
+            blob: PackageResourceBlob::File {
+                path: path.to_path_buf(),
+                size: file_size as u32,
+                compression_level,
+                should_scramble,
+            },
+        })
     }
 
     /// Create a new resource builder from a file on disk, but only reading a part of it.
@@ -137,26 +170,35 @@ impl PackageResourceBuilder {
         compressed_size: Option<u32>,
         is_scrambled: bool,
     ) -> Result<Self, PackageResourceBuilderError> {
-        let file_size = path.metadata().map_err(PackageResourceBuilderError::IoError)?.len();
+        let file_size = path
+            .metadata()
+            .map_err(PackageResourceBuilderError::IoError)?
+            .len();
 
         if offset >= file_size {
             return Err(PackageResourceBuilderError::InvalidFileOffset);
         }
 
-        let read_size = compressed_size.unwrap_or_else(|| size);
+        let read_size = compressed_size.unwrap_or(size);
 
         if offset + read_size as u64 > file_size {
             return Err(PackageResourceBuilderError::InvalidFileBlobSize);
         }
 
-        return Ok(Self {
+        Ok(Self {
             rrid,
             resource_type: Self::resource_type_to_bytes(resource_type)?,
             system_memory_requirement: size,
             video_memory_requirement: u32::MAX,
             references: vec![],
-            blob: PackageResourceBlob::FromFileAtOffset { path: path.to_path_buf(), offset, size, compressed_size, is_scrambled },
-        });
+            blob: PackageResourceBlob::FileAtOffset {
+                path: path.to_path_buf(),
+                offset,
+                size,
+                compressed_size,
+                is_scrambled,
+            },
+        })
     }
 
     /// Create a new resource builder from a (possibly compressed) in-memory blob.
@@ -186,7 +228,11 @@ impl PackageResourceBuilder {
             system_memory_requirement: real_size,
             video_memory_requirement: u32::MAX,
             references: vec![],
-            blob: PackageResourceBlob::FromCompressedMemory { data, decompressed_size, is_scrambled },
+            blob: PackageResourceBlob::CompressedMemory {
+                data,
+                decompressed_size,
+                is_scrambled,
+            },
         })
     }
 
@@ -220,7 +266,11 @@ impl PackageResourceBuilder {
             system_memory_requirement: real_size,
             video_memory_requirement: u32::MAX,
             references: vec![],
-            blob: PackageResourceBlob::FromMemory { data, compression_level, should_scramble },
+            blob: PackageResourceBlob::Memory {
+                data,
+                compression_level,
+                should_scramble,
+            },
         })
     }
 
@@ -237,10 +287,11 @@ impl PackageResourceBuilder {
         woa_version: WoaVersion,
         compression_level: Option<i32>,
     ) -> Result<Self, PackageResourceBuilderError> {
-
         let system_memory_requirement = glacier_resource.system_memory_requirement();
         let video_memory_requirement = glacier_resource.video_memory_requirement();
-        let data = glacier_resource.serialize(woa_version).map_err(PackageResourceBuilderError::GlacierResourceError)?;
+        let data = glacier_resource
+            .serialize(woa_version)
+            .map_err(PackageResourceBuilderError::GlacierResourceError)?;
 
         Ok(Self {
             rrid,
@@ -248,14 +299,14 @@ impl PackageResourceBuilder {
             system_memory_requirement: u32::try_from(system_memory_requirement).unwrap_or(u32::MAX),
             video_memory_requirement: u32::try_from(video_memory_requirement).unwrap_or(u32::MAX),
             references: vec![],
-            blob: PackageResourceBlob::FromMemory {
+            blob: PackageResourceBlob::Memory {
                 data,
                 compression_level,
                 should_scramble: glacier_resource.should_scramble(),
             },
         })
     }
-    
+
     /// Adds a reference to the resource.
     ///
     /// This specifies that this resource depends on / references another resource.
@@ -263,7 +314,11 @@ impl PackageResourceBuilder {
     /// # Arguments
     /// * `rrid` - The resource ID of the reference.
     /// * `flags` - The flags of the reference.
-    pub fn with_reference(&mut self, rrid: RuntimeResourceID, flags: ResourceReferenceFlags) -> &mut Self {
+    pub fn with_reference(
+        &mut self,
+        rrid: RuntimeResourceID,
+        flags: ResourceReferenceFlags,
+    ) -> &mut Self {
         self.references.push((rrid, flags));
         self
     }
@@ -273,7 +328,11 @@ impl PackageResourceBuilder {
     /// # Arguments
     /// * `system_memory_requirement` - The system memory requirement of the resource.
     /// * `video_memory_requirement` - The video memory requirement of the resource.
-    pub fn with_memory_requirements(&mut self, system_memory_requirement: u32, video_memory_requirement: u32) -> &mut Self {
+    pub fn with_memory_requirements(
+        &mut self,
+        system_memory_requirement: u32,
+        video_memory_requirement: u32,
+    ) -> &mut Self {
         self.system_memory_requirement = system_memory_requirement;
         self.video_memory_requirement = video_memory_requirement;
         self
@@ -317,13 +376,13 @@ pub enum PackageBuilderError {
 
     #[error("Could not duplicate resource {0} from the source package: {1}")]
     CannotDuplicateResource(RuntimeResourceID, PackageResourceBuilderError),
-    
+
     #[error("LZ4 compression error: {0}")]
     Lz4CompressionError(#[from] lzzzz::Error),
-    
+
     #[error("Invalid partition id index cannot be greater than 255")]
     InvalidPartitionIdIndex,
-    
+
     #[error("Patch id cannot be greater than 255")]
     InvalidPatchId,
 }
@@ -348,7 +407,7 @@ impl<W: Write + Read + Seek> Write for XorWriter<'_, W> {
 
         for (index, byte) in buf.iter().enumerate() {
             let xored_byte = *byte ^ str_xor[index % str_xor.len()];
-            self.writer.write(&[xored_byte])?;
+            self.writer.write_all(&[xored_byte])?;
         }
 
         Ok(buf.len())
@@ -374,17 +433,20 @@ impl PackageBuilder {
             unneeded_resources: IndexSet::new(),
         }
     }
-    
+
     /// Creates a new package builder using the given partition id and patch id.
-    /// 
+    ///
     /// # Arguments
     /// * `partition_id` - The partition id of the package.
     /// * `patch_id` - The patch id of the package.
-    pub fn new_with_patch_id(partition_id: PartitionId, patch_id: PatchId) -> Result<Self, PackageBuilderError> {
+    pub fn new_with_patch_id(
+        partition_id: PartitionId,
+        patch_id: PatchId,
+    ) -> Result<Self, PackageBuilderError> {
         if partition_id.index() >= u8::MAX as usize {
             return Err(PackageBuilderError::InvalidPartitionIdIndex);
         }
-        
+
         Ok(Self {
             chunk_id: partition_id.index() as u8,
             chunk_type: match partition_id.part_type() {
@@ -397,7 +459,7 @@ impl PackageBuilder {
                     if id > u8::MAX as usize {
                         return Err(PackageBuilderError::InvalidPatchId);
                     }
-                    
+
                     id as u8
                 }
             },
@@ -410,13 +472,30 @@ impl PackageBuilder {
     ///
     /// # Arguments
     /// * `resource_package` - The ResourcePackage to duplicate.
-    pub fn from_resource_package(resource_package: &ResourcePackage) -> Result<Self, PackageBuilderError> {
-        let source = resource_package.source.as_ref().ok_or(PackageBuilderError::NoSource)?;
+    pub fn from_resource_package(
+        resource_package: &ResourcePackage,
+    ) -> Result<Self, PackageBuilderError> {
+        let source = resource_package
+            .source
+            .as_ref()
+            .ok_or(PackageBuilderError::NoSource)?;
 
         let mut package = Self {
-            chunk_id: resource_package.metadata.as_ref().map(|m| m.chunk_id).unwrap_or(0),
-            chunk_type: resource_package.metadata.as_ref().map(|m| m.chunk_type).unwrap_or(ChunkType::Standard),
-            patch_id: resource_package.metadata.as_ref().map(|m| m.patch_id).unwrap_or(0),
+            chunk_id: resource_package
+                .metadata
+                .as_ref()
+                .map(|m| m.chunk_id)
+                .unwrap_or(0),
+            chunk_type: resource_package
+                .metadata
+                .as_ref()
+                .map(|m| m.chunk_type)
+                .unwrap_or(ChunkType::Standard),
+            patch_id: resource_package
+                .metadata
+                .as_ref()
+                .map(|m| m.patch_id)
+                .unwrap_or(0),
             resources: IndexMap::new(),
             unneeded_resources: IndexSet::new(),
         };
@@ -432,7 +511,8 @@ impl PackageBuilder {
                         resource.header.data_size,
                         resource.compressed_size(),
                         resource.is_scrambled(),
-                    ).map_err(|e| PackageBuilderError::CannotDuplicateResource(*rrid, e))?
+                    )
+                    .map_err(|e| PackageBuilderError::CannotDuplicateResource(*rrid, e))?
                 }
 
                 ResourcePackageSource::Memory(source_data) => {
@@ -455,11 +535,15 @@ impl PackageBuilder {
                         source_data[start_offset..end_offset].to_vec(),
                         decompressed_size,
                         resource.is_scrambled(),
-                    ).map_err(|e| PackageBuilderError::CannotDuplicateResource(*rrid, e))?
+                    )
+                    .map_err(|e| PackageBuilderError::CannotDuplicateResource(*rrid, e))?
                 }
             };
 
-            builder.with_memory_requirements(resource.system_memory_requirement(), resource.video_memory_requirement());
+            builder.with_memory_requirements(
+                resource.system_memory_requirement(),
+                resource.video_memory_requirement(),
+            );
 
             for (rrid, flags) in resource.references() {
                 builder.with_reference(*rrid, *flags);
@@ -502,39 +586,60 @@ impl PackageBuilder {
     }
 
     /// Patches data at a given offset and returns to the previous position.
-    fn backpatch<W: Write + Read + Seek, T: BinWrite>(writer: &mut W, patch_offset: u64, data: &T) -> Result<(), PackageBuilderError>
+    fn backpatch<W: Write + Read + Seek, T: BinWrite + WriteEndian>(
+        writer: &mut W,
+        patch_offset: u64,
+        data: &T,
+    ) -> Result<(), PackageBuilderError>
     where
-        T: WriteEndian,
         for<'a> T::Args<'a>: Required,
     {
-        let current_offset = writer.stream_position().map_err(PackageBuilderError::IoError)?;
-        writer.seek(io::SeekFrom::Start(patch_offset)).map_err(PackageBuilderError::IoError)?;
-        data.write(writer).map_err(PackageBuilderError::SerializationError)?;
-        writer.seek(io::SeekFrom::Start(current_offset)).map_err(PackageBuilderError::IoError)?;
+        let current_offset = writer
+            .stream_position()
+            .map_err(PackageBuilderError::IoError)?;
+        writer
+            .seek(io::SeekFrom::Start(patch_offset))
+            .map_err(PackageBuilderError::IoError)?;
+        data.write(writer)
+            .map_err(PackageBuilderError::SerializationError)?;
+        writer
+            .seek(io::SeekFrom::Start(current_offset))
+            .map_err(PackageBuilderError::IoError)?;
         Ok(())
     }
 
     /// Writes the offset table to the given writer.
-    fn write_offset_table<W: Write + Read + Seek>(&self, writer: &mut W) -> Result<OffsetTableResult, PackageBuilderError> {
+    fn write_offset_table<W: Write + Read + Seek>(
+        &self,
+        writer: &mut W,
+    ) -> Result<OffsetTableResult, PackageBuilderError> {
         // We need to keep a map of rrid => offset to patch the data offsets later.
         let mut resource_entry_offsets = HashMap::new();
-        let offset_table_start = writer.stream_position().map_err(PackageBuilderError::IoError)?;
+        let offset_table_start = writer
+            .stream_position()
+            .map_err(PackageBuilderError::IoError)?;
 
         for (rrid, _) in &self.resources {
-            let current_offset = writer.stream_position().map_err(PackageBuilderError::IoError)?;
+            let current_offset = writer
+                .stream_position()
+                .map_err(PackageBuilderError::IoError)?;
 
             let resource_entry = PackageOffsetInfo {
-                runtime_resource_id: rrid.clone(),
+                runtime_resource_id: *rrid,
                 data_offset: 0,
                 flags: PackageOffsetFlags::new(),
             };
 
-            resource_entry.write(writer).map_err(PackageBuilderError::SerializationError)?;
-            resource_entry_offsets.insert(rrid.clone(), current_offset);
+            resource_entry
+                .write(writer)
+                .map_err(PackageBuilderError::SerializationError)?;
+            resource_entry_offsets.insert(*rrid, current_offset);
         }
 
         // Write the offset table size.
-        let offset_table_end = writer.stream_position().map_err(PackageBuilderError::IoError)?;
+        let offset_table_end = writer
+            .stream_position()
+            .map_err(PackageBuilderError::IoError)?;
         let offset_table_size = offset_table_end - offset_table_start;
 
         if offset_table_size > u32::MAX as u64 {
@@ -548,11 +653,19 @@ impl PackageBuilder {
     }
 
     /// Writes the metadata table to the given writer.
-    fn write_metadata_table<W: Write + Read + Seek>(&self, writer: &mut W, legacy_references: bool) -> Result<MetadataTableResult, PackageBuilderError> {
-        let metadata_table_start = writer.stream_position().map_err(PackageBuilderError::IoError)?;
+    fn write_metadata_table<W: Write + Read + Seek>(
+        &self,
+        writer: &mut W,
+        legacy_references: bool,
+    ) -> Result<MetadataTableResult, PackageBuilderError> {
+        let metadata_table_start = writer
+            .stream_position()
+            .map_err(PackageBuilderError::IoError)?;
 
         for (_, resource) in &self.resources {
-            let metadata_offset = writer.stream_position().map_err(PackageBuilderError::IoError)?;
+            let metadata_offset = writer
+                .stream_position()
+                .map_err(PackageBuilderError::IoError)?;
 
             // Write the resource metadata followed by the references table if there are any.
             // We set the references chunk size to 0, and we'll patch it later.
@@ -566,42 +679,56 @@ impl PackageBuilder {
                 references: Vec::new(),
             };
 
-            resource_metadata.write(writer).map_err(PackageBuilderError::SerializationError)?;
+            resource_metadata
+                .write(writer)
+                .map_err(PackageBuilderError::SerializationError)?;
 
             // Write the references table if there are any.
             if !resource.references.is_empty() {
-                let reference_table_start = writer.stream_position().map_err(PackageBuilderError::IoError)?;
+                let reference_table_start = writer
+                    .stream_position()
+                    .map_err(PackageBuilderError::IoError)?;
 
-                let reference_count_and_flags =
-                    ResourceReferenceCountAndFlags::new()
-                        .with_reference_count(resource.references.len() as u32)
-                        .with_is_new_format(!legacy_references)
-                        .with_always_true(true);
+                let reference_count_and_flags = ResourceReferenceCountAndFlags::new()
+                    .with_reference_count(resource.references.len() as u32)
+                    .with_is_new_format(!legacy_references)
+                    .with_always_true(true);
 
-                reference_count_and_flags.write(writer).map_err(PackageBuilderError::SerializationError)?;
+                reference_count_and_flags
+                    .write(writer)
+                    .map_err(PackageBuilderError::SerializationError)?;
 
                 // In legacy mode, we write resource ids first, then flags.
                 // In new mode, we do the opposite. We also use the appropriate version of the flags.
                 if legacy_references {
                     for (rrid, _) in &resource.references {
-                        rrid.write(writer).map_err(PackageBuilderError::SerializationError)?;
+                        rrid.write(writer)
+                            .map_err(PackageBuilderError::SerializationError)?;
                     }
 
                     for (_, flags) in &resource.references {
-                        flags.as_v1().write(writer).map_err(PackageBuilderError::SerializationError)?;
+                        flags
+                            .as_v1()
+                            .write(writer)
+                            .map_err(PackageBuilderError::SerializationError)?;
                     }
-                }
-                else {
+                } else {
                     for (_, flags) in &resource.references {
-                        flags.as_v2().write(writer).map_err(PackageBuilderError::SerializationError)?;
+                        flags
+                            .as_v2()
+                            .write(writer)
+                            .map_err(PackageBuilderError::SerializationError)?;
                     }
 
                     for (rrid, _) in &resource.references {
-                        rrid.write(writer).map_err(PackageBuilderError::SerializationError)?;
+                        rrid.write(writer)
+                            .map_err(PackageBuilderError::SerializationError)?;
                     }
                 }
 
-                let reference_table_end = writer.stream_position().map_err(PackageBuilderError::IoError)?;
+                let reference_table_end = writer
+                    .stream_position()
+                    .map_err(PackageBuilderError::IoError)?;
                 let reference_table_size = reference_table_end - reference_table_start;
 
                 if reference_table_size > u32::MAX as u64 {
@@ -615,7 +742,9 @@ impl PackageBuilder {
         }
 
         // Write the metadata table size.
-        let metadata_table_end = writer.stream_position().map_err(PackageBuilderError::IoError)?;
+        let metadata_table_end = writer
+            .stream_position()
+            .map_err(PackageBuilderError::IoError)?;
         let metadata_table_size = metadata_table_end - metadata_table_start;
 
         if metadata_table_size > u32::MAX as u64 {
@@ -667,12 +796,14 @@ impl PackageBuilder {
                 metadata_table_size: 0,
             },
             unneeded_resource_count: self.unneeded_resources.len() as u32,
-            unneeded_resources: Some(self.unneeded_resources.iter().map(|rrid| rrid.clone()).collect()),
+            unneeded_resources: Some(self.unneeded_resources.iter().copied().collect()),
             resources: IndexMap::new(),
         };
 
         // Write the header and the tables.
-        header.write_args(writer, (is_patch,)).map_err(PackageBuilderError::SerializationError)?;
+        header
+            .write_args(writer, (is_patch,))
+            .map_err(PackageBuilderError::SerializationError)?;
 
         let offset_table_result = self.write_offset_table(writer)?;
         let metadata_table_result = self.write_metadata_table(writer, legacy_references)?;
@@ -684,10 +815,17 @@ impl PackageBuilder {
 
         // Write the resource data.
         for (rrid, resource) in &self.resources {
-            let data_offset = writer.stream_position().map_err(PackageBuilderError::IoError)?;
+            let data_offset = writer
+                .stream_position()
+                .map_err(PackageBuilderError::IoError)?;
 
             let (compressed_size, is_scrambled) = match &resource.blob {
-                PackageResourceBlob::FromFile { path, size, compression_level, should_scramble } => {
+                PackageResourceBlob::File {
+                    path,
+                    size,
+                    compression_level,
+                    should_scramble,
+                } => {
                     let mut file = File::open(path).map_err(PackageBuilderError::IoError)?;
 
                     // Wrap our writer in a XorWriter if we should scramble.
@@ -699,47 +837,78 @@ impl PackageBuilder {
                     let compressed_size = match compression_level {
                         Some(level) => {
                             // TODO: Switch to streaming API.
-                            let mut compressed_buffer = vec![0; lz4::max_compressed_size(*size as usize)];
+                            let mut compressed_buffer =
+                                vec![0; lz4::max_compressed_size(*size as usize)];
                             let mut decompressed_data = vec![0; *size as usize];
-                            file.read_exact(&mut decompressed_data).map_err(PackageBuilderError::IoError)?;
+                            file.read_exact(&mut decompressed_data)
+                                .map_err(PackageBuilderError::IoError)?;
 
                             let compressed_size = match version {
-                                PackageVersion::RPKGv1 => lz4::compress(&decompressed_data, &mut compressed_buffer, *level)?,
-                                PackageVersion::RPKGv2 => lz4_hc::compress(&decompressed_data, &mut compressed_buffer, *level)?,
+                                PackageVersion::RPKGv1 => lz4::compress(
+                                    &decompressed_data,
+                                    &mut compressed_buffer,
+                                    *level,
+                                )?,
+                                PackageVersion::RPKGv2 => lz4_hc::compress(
+                                    &decompressed_data,
+                                    &mut compressed_buffer,
+                                    *level,
+                                )?,
                             };
 
                             // Write the compressed data.
-                            data_writer.write_all(&compressed_buffer[..compressed_size]).map_err(PackageBuilderError::IoError)?;
-                         
+                            data_writer
+                                .write_all(&compressed_buffer[..compressed_size])
+                                .map_err(PackageBuilderError::IoError)?;
+
                             Some(compressed_size as u32)
                         }
-                    
+
                         None => {
-                            io::copy(&mut file, &mut data_writer).map_err(PackageBuilderError::IoError)?;
+                            io::copy(&mut file, &mut data_writer)
+                                .map_err(PackageBuilderError::IoError)?;
                             None
                         }
-                    };                
-                    
+                    };
+
                     (compressed_size, *should_scramble)
                 }
 
-                PackageResourceBlob::FromFileAtOffset { path, offset, size, compressed_size, is_scrambled } => {
+                PackageResourceBlob::FileAtOffset {
+                    path,
+                    offset,
+                    size,
+                    compressed_size,
+                    is_scrambled,
+                } => {
                     let size_to_copy = compressed_size.unwrap_or_else(|| *size);
 
                     let mut file = File::open(path).map_err(PackageBuilderError::IoError)?;
-                    file.seek(io::SeekFrom::Start(*offset)).map_err(PackageBuilderError::IoError)?;
-                    io::copy(&mut file.take(size_to_copy as u64), writer).map_err(PackageBuilderError::IoError)?;
+                    file.seek(io::SeekFrom::Start(*offset))
+                        .map_err(PackageBuilderError::IoError)?;
+                    io::copy(&mut file.take(size_to_copy as u64), writer)
+                        .map_err(PackageBuilderError::IoError)?;
 
                     (*compressed_size, *is_scrambled)
                 }
 
-                PackageResourceBlob::FromCompressedMemory { data, decompressed_size, is_scrambled } => {
-                    writer.write_all(&data).map_err(PackageBuilderError::IoError)?;
+                PackageResourceBlob::CompressedMemory {
+                    data,
+                    decompressed_size,
+                    is_scrambled,
+                } => {
+                    writer
+                        .write_all(data)
+                        .map_err(PackageBuilderError::IoError)?;
                     let compressed_size = decompressed_size.map(|_| data.len() as u32);
                     (compressed_size, *is_scrambled)
                 }
-                
-                PackageResourceBlob::FromMemory { data, compression_level, should_scramble } => {
+
+                PackageResourceBlob::Memory {
+                    data,
+                    compression_level,
+                    should_scramble,
+                } => {
                     // Wrap our writer in a XorWriter if we should scramble.
                     let mut data_writer: Box<dyn Write> = match should_scramble {
                         true => Box::new(XorWriter { writer }),
@@ -749,20 +918,29 @@ impl PackageBuilder {
                     let compressed_size = match compression_level {
                         Some(level) => {
                             // TODO: Switch to streaming API.
-                            let mut compressed_buffer = vec![0; lz4::max_compressed_size(data.len())];
+                            let mut compressed_buffer =
+                                vec![0; lz4::max_compressed_size(data.len())];
                             let compressed_size = match version {
-                                PackageVersion::RPKGv1 => lz4::compress(&data, &mut compressed_buffer, *level)?,
-                                PackageVersion::RPKGv2 => lz4_hc::compress(&data, &mut compressed_buffer, *level)?,
+                                PackageVersion::RPKGv1 => {
+                                    lz4::compress(data, &mut compressed_buffer, *level)?
+                                }
+                                PackageVersion::RPKGv2 => {
+                                    lz4_hc::compress(data, &mut compressed_buffer, *level)?
+                                }
                             };
-                            
+
                             // Write the compressed data.
-                            data_writer.write_all(&compressed_buffer[..compressed_size]).map_err(PackageBuilderError::IoError)?;
-                            
+                            data_writer
+                                .write_all(&compressed_buffer[..compressed_size])
+                                .map_err(PackageBuilderError::IoError)?;
+
                             Some(compressed_size as u32)
                         }
 
                         None => {
-                            data_writer.write_all(&data).map_err(PackageBuilderError::IoError)?;
+                            data_writer
+                                .write_all(data)
+                                .map_err(PackageBuilderError::IoError)?;
                             None
                         }
                     };
@@ -773,15 +951,17 @@ impl PackageBuilder {
 
             // Patch the offset info.
             // If the resource is not compressed, we set the compressed size to 0.
-            let final_compressed_size = compressed_size.unwrap_or_else(|| 0);
+            let final_compressed_size = compressed_size.unwrap_or(0);
 
             let offset_info = PackageOffsetInfo {
-                runtime_resource_id: rrid.clone(),
+                runtime_resource_id: *rrid,
                 data_offset,
-                flags: PackageOffsetFlags::new().with_compressed_size(final_compressed_size).with_is_scrambled(is_scrambled),
+                flags: PackageOffsetFlags::new()
+                    .with_compressed_size(final_compressed_size)
+                    .with_is_scrambled(is_scrambled),
             };
 
-            let patch_offset = offset_table_result.resource_entry_offsets[&rrid];
+            let patch_offset = offset_table_result.resource_entry_offsets[rrid];
             PackageBuilder::backpatch(writer, patch_offset, &offset_info)?;
         }
 
@@ -795,7 +975,13 @@ impl PackageBuilder {
     /// * `output_path` - The path to the output file.
     /// * `is_patch` - Whether the package is a patch package.
     /// * `legacy_references` - Whether to use the legacy references format.
-    pub fn build(self, version: PackageVersion, output_path: &Path, is_patch: bool, legacy_references: bool) -> Result<(), PackageBuilderError> {
+    pub fn build(
+        self,
+        version: PackageVersion,
+        output_path: &Path,
+        is_patch: bool,
+        legacy_references: bool,
+    ) -> Result<(), PackageBuilderError> {
         let mut file = File::create(output_path).map_err(PackageBuilderError::IoError)?;
         self.build_internal(version, &mut file, is_patch, legacy_references)
     }
@@ -806,10 +992,14 @@ impl PackageBuilder {
     /// * `version` - The version of the package to build.
     /// * `is_patch` - Whether the package is a patch package.
     /// * `legacy_references` - Whether to use the legacy references format.
-    pub fn build_in_memory(self, version: PackageVersion, is_patch: bool, legacy_references: bool) -> Result<Vec<u8>, PackageBuilderError> {
+    pub fn build_in_memory(
+        self,
+        version: PackageVersion,
+        is_patch: bool,
+        legacy_references: bool,
+    ) -> Result<Vec<u8>, PackageBuilderError> {
         let mut writer = Cursor::new(vec![]);
         self.build_internal(version, &mut writer, is_patch, legacy_references)?;
         Ok(writer.into_inner())
     }
 }
-

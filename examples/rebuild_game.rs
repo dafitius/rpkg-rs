@@ -1,11 +1,11 @@
-use std::{env, fs, io};
-use std::path::PathBuf;
 use md5::{Digest, Md5};
 use rpkg_rs::resource::package_builder::PackageBuilder;
 use rpkg_rs::resource::partition_manager::PartitionManager;
 use rpkg_rs::resource::resource_package::ResourcePackageSource;
 use rpkg_rs::resource::resource_partition::PatchId;
 use rpkg_rs::WoaVersion;
+use std::path::PathBuf;
+use std::{env, fs, io};
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -28,7 +28,7 @@ fn main() {
     };
 
     let output_path = PathBuf::from(&args[3]);
-    
+
     // Create output directory if it doesn't exist.
     if !output_path.is_dir() {
         std::fs::create_dir_all(&output_path).unwrap_or_else(|e| {
@@ -39,15 +39,11 @@ fn main() {
 
     // Mount the game.
     println!("Mounting game...");
-    let package_manager = PartitionManager::mount_game(
-        retail_path,
-        game_version,
-        true,
-        |_, _| {},
-    ).unwrap_or_else(|e| {
-        eprintln!("failed to mount game: {}", e);
-        std::process::exit(0);
-    });
+    let package_manager = PartitionManager::mount_game(retail_path, game_version, true, |_, _| {})
+        .unwrap_or_else(|e| {
+            eprintln!("failed to mount game: {}", e);
+            std::process::exit(0);
+        });
 
     println!("Rebuilding game...");
 
@@ -58,7 +54,10 @@ fn main() {
             println!("Rebuilding package '{}'", output_name);
 
             let mut builder = PackageBuilder::from_resource_package(&package).unwrap_or_else(|e| {
-                eprintln!("failed to create package builder for package '{}': {}", output_name, e);
+                eprintln!(
+                    "failed to create package builder for package '{}': {}",
+                    output_name, e
+                );
                 std::process::exit(0);
             });
 
@@ -66,30 +65,38 @@ fn main() {
                 PatchId::Patch(id) => {
                     builder.with_patch_id(*id as u8);
                     true
-                },
+                }
                 _ => false,
             };
 
-            builder.build(
-                package.version(),
-                output_path.join(&output_name).as_path(),
-                is_patch,
-                package.has_legacy_references(),
-            ).unwrap_or_else(|e| {
-                eprintln!("failed to build package '{}': {}", output_name, e);
-                std::process::exit(0);
-            });
+            builder
+                .build(
+                    package.version(),
+                    output_path.join(&output_name).as_path(),
+                    is_patch,
+                    package.has_legacy_references(),
+                )
+                .unwrap_or_else(|e| {
+                    eprintln!("failed to build package '{}': {}", output_name, e);
+                    std::process::exit(0);
+                });
 
             // After it's built, check if the generated file is the same as the original.
             let original_file = match &package.source {
                 Some(ResourcePackageSource::File(path)) => path,
-                _ => panic!("Package '{}' of game '{:?}' has no source", output_name, game_version),
+                _ => panic!(
+                    "Package '{}' of game '{:?}' has no source",
+                    output_name, game_version
+                ),
             };
 
             let generated_file = output_path.join(&output_name);
 
             if original_file.metadata().unwrap().len() != generated_file.metadata().unwrap().len() {
-                panic!("File size mismatch for package '{}' of game '{:?}'", output_name, game_version);
+                panic!(
+                    "File size mismatch for package '{}' of game '{:?}'",
+                    output_name, game_version
+                );
             }
 
             // Hash the files and compare them.
@@ -108,7 +115,10 @@ fn main() {
             };
 
             if original_hash != generated_hash {
-                panic!("Hash mismatch for package '{}' of game '{:?}'", output_name, game_version);
+                panic!(
+                    "Hash mismatch for package '{}' of game '{:?}'",
+                    output_name, game_version
+                );
             }
         }
     }
