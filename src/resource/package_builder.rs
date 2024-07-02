@@ -11,8 +11,9 @@ use binrw::meta::WriteEndian;
 use indexmap::{IndexMap, IndexSet};
 use lzzzz::{lz4, lz4_hc};
 use thiserror::Error;
-
+use crate::resource::pdefs::{PartitionId, PartitionType};
 use crate::resource::resource_package::{ChunkType, PackageHeader, PackageMetadata, PackageOffsetFlags, PackageOffsetInfo, PackageVersion, ResourceHeader, ResourcePackage, ResourcePackageSource, ResourceReferenceCountAndFlags, ResourceReferenceFlags};
+use crate::resource::resource_partition::PatchId;
 use crate::resource::runtime_resource_id::RuntimeResourceID;
 
 enum PackageResourceBlob {
@@ -283,6 +284,12 @@ pub enum PackageBuilderError {
     
     #[error("LZ4 compression error: {0}")]
     Lz4CompressionError(#[from] lzzzz::Error),
+    
+    #[error("Invalid partition id index cannot be greater than 255")]
+    InvalidPartitionIdIndex,
+    
+    #[error("Patch id cannot be greater than 255")]
+    InvalidPatchId,
 }
 
 struct OffsetTableResult {
@@ -330,6 +337,37 @@ impl PackageBuilder {
             resources: IndexMap::new(),
             unneeded_resources: IndexSet::new(),
         }
+    }
+    
+    /// Creates a new package builder using the given partition id and patch id.
+    /// 
+    /// # Arguments
+    /// * `partition_id` - The partition id of the package.
+    /// * `patch_id` - The patch id of the package.
+    pub fn new_with_patch_id(partition_id: PartitionId, patch_id: PatchId) -> Result<Self, PackageBuilderError> {
+        if partition_id.index() >= u8::MAX as usize {
+            return Err(PackageBuilderError::InvalidPartitionIdIndex);
+        }
+        
+        Ok(Self {
+            chunk_id: partition_id.index() as u8,
+            chunk_type: match partition_id.part_type() {
+                PartitionType::Addon => ChunkType::Addon,
+                _ => ChunkType::Standard,
+            },
+            patch_id: match patch_id {
+                PatchId::Base => 0,
+                PatchId::Patch(id) => {
+                    if id > u8::MAX as usize {
+                        return Err(PackageBuilderError::InvalidPatchId);
+                    }
+                    
+                    id as u8
+                }
+            },
+            resources: IndexMap::new(),
+            unneeded_resources: IndexSet::new(),
+        })
     }
 
     /// Creates a new package builder by duplicating an existing ResourcePackage.
