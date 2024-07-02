@@ -11,6 +11,7 @@ use binrw::meta::WriteEndian;
 use indexmap::{IndexMap, IndexSet};
 use lzzzz::{lz4, lz4_hc};
 use thiserror::Error;
+use crate::{GlacierResource, GlacierResourceError, WoaVersion};
 use crate::resource::pdefs::{PartitionId, PartitionType};
 use crate::resource::resource_package::{ChunkType, PackageHeader, PackageMetadata, PackageOffsetFlags, PackageOffsetInfo, PackageVersion, ResourceHeader, ResourcePackage, ResourcePackageSource, ResourceReferenceCountAndFlags, ResourceReferenceFlags};
 use crate::resource::resource_partition::PatchId;
@@ -67,6 +68,9 @@ pub enum PackageResourceBuilderError {
 
     #[error("Resource types must be exactly 4 characters")]
     InvalidResourceType,
+    
+    #[error("Internal Glacier resource error")]
+    GlacierResourceError(#[from] GlacierResourceError)
 }
 
 /// A builder for creating a resource within a ResourcePackage.
@@ -220,6 +224,38 @@ impl PackageResourceBuilder {
         })
     }
 
+    /// Create a new resource builder from a a GlacierResource.
+    ///
+    /// # Arguments
+    /// * `rrid` - The resource ID of the resource.
+    /// * `glacier_resource` - A reference to an object implementing the `GlacierResource` trait.
+    /// * `woa_version` - The HITMAN game version you want to construct the GlacierResource for
+    /// * `compression_level` - The compression level to use for the file, or None for no compression.
+    pub fn from_glacier_resource<G: GlacierResource>(
+        rrid: RuntimeResourceID,
+        glacier_resource: &G,
+        woa_version: WoaVersion,
+        compression_level: Option<i32>,
+    ) -> Result<Self, PackageResourceBuilderError> {
+
+        let system_memory_requirement = glacier_resource.system_memory_requirement();
+        let video_memory_requirement = glacier_resource.video_memory_requirement();
+        let data = glacier_resource.serialize(woa_version).map_err(PackageResourceBuilderError::GlacierResourceError)?;
+
+        Ok(Self {
+            rrid,
+            resource_type: glacier_resource.resource_type(),
+            system_memory_requirement: u32::try_from(system_memory_requirement).unwrap_or(u32::MAX),
+            video_memory_requirement: u32::try_from(video_memory_requirement).unwrap_or(u32::MAX),
+            references: vec![],
+            blob: PackageResourceBlob::FromMemory {
+                data,
+                compression_level,
+                should_scramble: glacier_resource.should_scramble(),
+            },
+        })
+    }
+    
     /// Adds a reference to the resource.
     ///
     /// This specifies that this resource depends on / references another resource.
