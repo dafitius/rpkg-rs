@@ -9,16 +9,16 @@ use binrw::BinWrite;
 use binrw::io::Cursor;
 use binrw::meta::WriteEndian;
 use indexmap::{IndexMap, IndexSet};
-use lz4::EncoderBuilder;
+use lzzzz::{lz4, lz4_hc};
 use thiserror::Error;
 
 use crate::resource::resource_package::{ChunkType, PackageHeader, PackageMetadata, PackageOffsetFlags, PackageOffsetInfo, PackageVersion, ResourceHeader, ResourcePackage, ResourcePackageSource, ResourceReferenceCountAndFlags, ResourceReferenceFlags};
 use crate::resource::runtime_resource_id::RuntimeResourceID;
 
 enum PackageResourceBlob {
-    FromFile { path: PathBuf, size: u32, compression_level: Option<u32>, should_scramble: bool },
+    FromFile { path: PathBuf, size: u32, compression_level: Option<i32>, should_scramble: bool },
     FromFileAtOffset { path: PathBuf, offset: u64, size: u32, compressed_size: Option<u32>, is_scrambled: bool },
-    FromMemory { data: Vec<u8>, compression_level: Option<u32>, should_scramble: bool },
+    FromMemory { data: Vec<u8>, compression_level: Option<i32>, should_scramble: bool },
     FromCompressedMemory { data: Vec<u8>, decompressed_size: Option<u32>, is_scrambled: bool },
 }
 
@@ -63,7 +63,7 @@ pub enum PackageResourceBuilderError {
 
     #[error("The size you provided extends beyond the end of the file")]
     InvalidFileBlobSize,
-    
+
     #[error("Resource types must be exactly 4 characters")]
     InvalidResourceType,
 }
@@ -81,7 +81,7 @@ impl PackageResourceBuilder {
             .try_into()
             .map_err(|_| PackageResourceBuilderError::InvalidResourceType)
     }
-    
+
     /// Create a new resource builder from a file on disk.
     ///
     /// # Arguments
@@ -94,7 +94,7 @@ impl PackageResourceBuilder {
         rrid: RuntimeResourceID,
         resource_type: &str,
         path: &Path,
-        compression_level: Option<u32>,
+        compression_level: Option<i32>,
         should_scramble: bool,
     ) -> Result<Self, PackageResourceBuilderError> {
         let file_size = path.metadata().map_err(PackageResourceBuilderError::IoError)?.len();
@@ -184,12 +184,12 @@ impl PackageResourceBuilder {
             blob: PackageResourceBlob::FromCompressedMemory { data, decompressed_size, is_scrambled },
         })
     }
-    
+
     /// Create a new resource builder from an in-memory blob.
-    /// 
+    ///
     /// This is similar to `from_compressed_memory`, but it expects the data to be uncompressed and
     /// can optionally compress and scramble it.
-    /// 
+    ///
     /// # Arguments
     /// * `rrid` - The resource ID of the resource.
     /// * `resource_type` - The type of the resource.
@@ -200,15 +200,15 @@ impl PackageResourceBuilder {
         rrid: RuntimeResourceID,
         resource_type: &str,
         data: Vec<u8>,
-        compression_level: Option<u32>,
+        compression_level: Option<i32>,
         should_scramble: bool,
     ) -> Result<Self, PackageResourceBuilderError> {
         if data.len() > u32::MAX as usize {
             return Err(PackageResourceBuilderError::FileTooLarge);
         }
-        
+
         let real_size = data.len() as u32;
-        
+
         Ok(Self {
             rrid,
             resource_type: Self::resource_type_to_bytes(resource_type)?,
@@ -280,6 +280,9 @@ pub enum PackageBuilderError {
 
     #[error("Could not duplicate resource {0} from the source package: {1}")]
     CannotDuplicateResource(RuntimeResourceID, PackageResourceBuilderError),
+    
+    #[error("LZ4 compression error: {0}")]
+    Lz4CompressionError(#[from] lzzzz::Error),
 }
 
 struct OffsetTableResult {
@@ -299,12 +302,12 @@ struct XorWriter<'a, W: Write + Read + Seek> {
 impl<W: Write + Read + Seek> Write for XorWriter<'_, W> {
     fn write(&mut self, buf: &[u8]) -> Result<usize, io::Error> {
         let str_xor = [0xdc, 0x45, 0xa6, 0x9c, 0xd3, 0x72, 0x4c, 0xab];
-        
+
         for (index, byte) in buf.iter().enumerate() {
             let xored_byte = *byte ^ str_xor[index % str_xor.len()];
             self.writer.write(&[xored_byte])?;
         }
-        
+
         Ok(buf.len())
     }
 
@@ -509,7 +512,7 @@ impl PackageBuilder {
                     for (rrid, _) in &resource.references {
                         rrid.write(writer).map_err(PackageBuilderError::SerializationError)?;
                     }
-                    
+
                     for (_, flags) in &resource.references {
                         flags.as_v1().write(writer).map_err(PackageBuilderError::SerializationError)?;
                     }
@@ -552,10 +555,10 @@ impl PackageBuilder {
 
     /// Builds the package, writing it to the given writer.
     fn build_internal<W: Write + Read + Seek>(
-        &self, 
-        version: PackageVersion, 
-        writer: &mut W, 
-        is_patch: bool, 
+        &self,
+        version: PackageVersion,
+        writer: &mut W,
+        is_patch: bool,
         legacy_references: bool,
     ) -> Result<(), PackageBuilderError> {
         // Perform some basic validation.
@@ -610,30 +613,31 @@ impl PackageBuilder {
             let data_offset = writer.stream_position().map_err(PackageBuilderError::IoError)?;
 
             let (compressed_size, is_scrambled) = match &resource.blob {
-                PackageResourceBlob::FromFile { path, size: _size, compression_level, should_scramble } => {
+                PackageResourceBlob::FromFile { path, size, compression_level, should_scramble } => {
                     let mut file = File::open(path).map_err(PackageBuilderError::IoError)?;
-                    let write_start_offset = writer.stream_position().map_err(PackageBuilderError::IoError)?;
-                    
+
                     // Wrap our writer in a XorWriter if we should scramble.
                     let mut data_writer: Box<dyn Write> = match should_scramble {
                         true => Box::new(XorWriter { writer }),
                         false => Box::new(&mut *writer),
                     };
-                    
+
                     let compressed_size = match compression_level {
                         Some(level) => {
-                            let mut encoder = EncoderBuilder::new()
-                                .level(*level)
-                                .build(data_writer)
-                                .map_err(PackageBuilderError::IoError)?;
+                            // TODO: Switch to streaming API.
+                            let mut compressed_buffer = vec![0; lz4::max_compressed_size(*size as usize)];
+                            let mut decompressed_data = vec![0; *size as usize];
+                            file.read_exact(&mut decompressed_data).map_err(PackageBuilderError::IoError)?;
 
-                            io::copy(&mut file, &mut encoder).map_err(PackageBuilderError::IoError)?;
-                            let (_, result) = encoder.finish();
-                            result?;
-                            
-                            let write_end_offset = writer.stream_position().map_err(PackageBuilderError::IoError)?;
-                            let compressed_size = (write_end_offset - write_start_offset) as u32;
-                            Some(compressed_size)
+                            let compressed_size = match version {
+                                PackageVersion::RPKGv1 => lz4::compress(&decompressed_data, &mut compressed_buffer, *level)?,
+                                PackageVersion::RPKGv2 => lz4_hc::compress(&decompressed_data, &mut compressed_buffer, *level)?,
+                            };
+
+                            // Write the compressed data.
+                            data_writer.write_all(&compressed_buffer[..compressed_size]).map_err(PackageBuilderError::IoError)?;
+                         
+                            Some(compressed_size as u32)
                         }
                     
                         None => {
@@ -662,8 +666,6 @@ impl PackageBuilder {
                 }
                 
                 PackageResourceBlob::FromMemory { data, compression_level, should_scramble } => {
-                    let write_start_offset = writer.stream_position().map_err(PackageBuilderError::IoError)?;
-
                     // Wrap our writer in a XorWriter if we should scramble.
                     let mut data_writer: Box<dyn Write> = match should_scramble {
                         true => Box::new(XorWriter { writer }),
@@ -672,19 +674,17 @@ impl PackageBuilder {
 
                     let compressed_size = match compression_level {
                         Some(level) => {
-                            let mut encoder = EncoderBuilder::new()
-                                .level(*level)
-                                .auto_flush(true)
-                                .build(data_writer)
-                                .map_err(PackageBuilderError::IoError)?;
-
-                            encoder.write_all(&data).map_err(PackageBuilderError::IoError)?;
-                            let (_, result) = encoder.finish();
-                            result?;
-
-                            let write_end_offset = writer.stream_position().map_err(PackageBuilderError::IoError)?;
-                            let compressed_size = (write_end_offset - write_start_offset) as u32;
-                            Some(compressed_size)
+                            // TODO: Switch to streaming API.
+                            let mut compressed_buffer = vec![0; lz4::max_compressed_size(data.len())];
+                            let compressed_size = match version {
+                                PackageVersion::RPKGv1 => lz4::compress(&data, &mut compressed_buffer, *level)?,
+                                PackageVersion::RPKGv2 => lz4_hc::compress(&data, &mut compressed_buffer, *level)?,
+                            };
+                            
+                            // Write the compressed data.
+                            data_writer.write_all(&compressed_buffer[..compressed_size]).map_err(PackageBuilderError::IoError)?;
+                            
+                            Some(compressed_size as u32)
                         }
 
                         None => {

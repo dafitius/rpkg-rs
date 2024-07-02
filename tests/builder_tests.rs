@@ -1,114 +1,171 @@
 use std::str::FromStr;
 use rpkg_rs::misc::resource_id::ResourceID;
 use rpkg_rs::resource::package_builder::{PackageBuilder, PackageResourceBuilder};
-use rpkg_rs::resource::resource_package::{ChunkType, PackageVersion, ResourcePackage, ResourceReferenceFlags, ResourceReferenceFlagsV2};
+use rpkg_rs::resource::resource_package::{ChunkType, PackageVersion, ResourcePackage, ResourceReferenceFlags, ResourceReferenceFlagsV1, ResourceReferenceFlagsV2};
 use rpkg_rs::resource::runtime_resource_id::RuntimeResourceID;
 
-#[test]
-fn test_build_simple_package_v2() -> Result<(), Box<dyn std::error::Error>> {
-    let resource_ids = vec![
-        ResourceID::from_str("[assembly:/res1.brick].pc_entitytype")?,
-        ResourceID::from_str("[assembly:/res2.brick].pc_entitytype")?,
-    ];
 
-    // Start building the package.
-    let mut builder = PackageBuilder::new(69, ChunkType::Standard);
-
-    for (i, rid) in resource_ids.iter().enumerate() {
-        // Create a fake resource id and data for the resource.
-        let rrid: RuntimeResourceID = RuntimeResourceID::from_resource_id(&rid);
-        let fake_data: Vec<u8> = (0..1024).map(|j| (i * j) as u8).collect();
-
-        // Create a resource from memory and add it to the package.
-        let mut resource = PackageResourceBuilder::from_memory(rrid, "TEMP", fake_data, None, false)?;
-
-        // Add references to the resource.
-        if i == 0 {
-            resource.with_reference(RuntimeResourceID::from(0x00123456789ABCDE), ResourceReferenceFlags::V2(ResourceReferenceFlagsV2::new().with_language_code(0x1F)));
-        } else {
-            resource.with_reference(RuntimeResourceID::from(0x0069696969696969), ResourceReferenceFlags::V2(ResourceReferenceFlagsV2::new().with_language_code(0x06)));
-            resource.with_reference(RuntimeResourceID::from(0x0042042042042042), ResourceReferenceFlags::V2(ResourceReferenceFlagsV2::new().with_language_code(0x09).with_runtime_acquired(true)));
-        }
-
-        builder.with_resource(resource);
-    }
-
-    // Build the package in memory.
-    let package_data = builder.build_in_memory(PackageVersion::RPKGv2, false, false)?;
-
-    // Now let's try to parse it again.
-    let package = ResourcePackage::from_memory(package_data, false)?;
-
-    // And check that we found the resources we expected.
-    assert_eq!(package.header.file_count, 2);
-    assert_eq!(package.resources.len(), 2);
-
-    let first_resource = package.resources.get(&RuntimeResourceID::from_resource_id(&resource_ids[0])).unwrap();
-    let second_resource = package.resources.get(&RuntimeResourceID::from_resource_id(&resource_ids[1])).unwrap();
-
-    // And check that we found the correct references in them and that they are in the expected order.
-    assert_eq!(first_resource.references().len(), 1);
-    assert_eq!(second_resource.references().len(), 2);
-
-    assert_eq!(first_resource.references()[0].1.language_code(), 0x1F);
-    assert_eq!(first_resource.references()[0].1.is_acquired(), false);
-
-    let second_resource_ref_1 = second_resource.references()[0];
-    assert_eq!(second_resource_ref_1.1.language_code(), 0x06);
-    assert_eq!(second_resource_ref_1.1.is_acquired(), false);
-
-    let second_resource_ref_2 = second_resource.references()[1];
-    assert_eq!(second_resource_ref_2.1.language_code(), 0x09);
-    assert_eq!(second_resource_ref_2.1.is_acquired(), true);
-
-    Ok(())
-}
-
-fn test_package_with_resource(compression_level: Option<u32>, should_scramble: bool) -> Result<(), Box<dyn std::error::Error>> {
+fn test_package_with_resource(
+    compression_level: Option<i32>, 
+    should_scramble: bool,
+    version: PackageVersion,
+    is_patch: bool,
+    legacy_references: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
     let resource_id = ResourceID::from_str("[assembly:/res1.brick].pc_entitytype")?;
+    
+    let unneeded_resource_ids = vec![
+        RuntimeResourceID::from_resource_id(&ResourceID::from_str("[assembly:/res2.brick].pc_entitytype")?),
+        RuntimeResourceID::from_resource_id(&ResourceID::from_str("[assembly:/res3.brick].pc_entitytype")?),
+    ];
+    
+    let references = vec![
+        RuntimeResourceID::from_resource_id(&ResourceID::from_str("[assembly:/ref1.brick].pc_entitytype")?),
+        RuntimeResourceID::from_resource_id(&ResourceID::from_str("[assembly:/ref2.brick].pc_entitytype")?),
+    ];
+    
+    let resource_reference_flags = if legacy_references {
+        ResourceReferenceFlags::V1(ResourceReferenceFlagsV1::new().with_runtime_acquired(true).with_install_dependency(true))
+    } else {
+        ResourceReferenceFlags::V2(ResourceReferenceFlagsV2::new().with_language_code(0x1F))
+    };
 
     // Start building the package.
     let mut builder = PackageBuilder::new(69, ChunkType::Standard);
 
     // Create a fake resource id and data for the resource.
     let rrid: RuntimeResourceID = RuntimeResourceID::from_resource_id(&resource_id);
-    let fake_data: Vec<u8> = (0..1024).map(|j| (j as u8)).collect();
+    let fake_data: Vec<u8> = (0..1024).map(|j| j as u8).collect();
 
     // Create a resource from memory and add it to the package.
-    let resource = PackageResourceBuilder::from_memory(rrid, "TEMP", fake_data.clone(), compression_level, should_scramble)?;
+    let mut resource = PackageResourceBuilder::from_memory(rrid, "TEMP", fake_data.clone(), compression_level, should_scramble)?;
+    
+    for reference in &references {
+        resource.with_reference(*reference, resource_reference_flags.clone());
+    }
 
     builder.with_resource(resource);
+    
+    if is_patch {
+        builder.with_patch_id(1);
+        
+        // Add some unneeded resources.
+        for rrid in &unneeded_resource_ids {
+            builder.with_unneeded_resource(*rrid);
+        }
+    }
 
     // Build the package in memory.
-    let package_data = builder.build_in_memory(PackageVersion::RPKGv2, false, false)?;
-
-    // Print as hex.
-    for byte in &package_data {
-        print!("{:02X}", *byte);
-    }
-    println!("");
+    let package_data = builder.build_in_memory(version, is_patch, legacy_references)?;
 
     // Now let's try to parse it again.
-    let package = ResourcePackage::from_memory(package_data, false)?;
+    let package = ResourcePackage::from_memory(package_data, is_patch)?;
 
-    // And check that its data matches the original.
+    // Check that its data matches the original.
     let resource_data = package.read_resource(&rrid).unwrap();
-    assert_eq!(resource_data, fake_data);
+    assert_eq!(resource_data, fake_data, "Resource data doesn't match");
+    
+    // Check that the references are correct and in the right order.
+    let resource_info = package.resources.get(&rrid).unwrap();
+    
+    for (i, (rrid, flags)) in resource_info.references().iter().enumerate() {
+        let reference = references[i];
+        assert_eq!(*rrid, reference, "Reference at index {} doesn't match", i);
+        assert_eq!(*flags, resource_reference_flags, "Reference flags at index {} don't match", i);
+    }
+    
+    // Check that the unneeded resources are correct.
+    if is_patch {
+        let parsed_unneeded_resource_ids = package.unneeded_resource_ids();
+        
+        assert_eq!(parsed_unneeded_resource_ids.len(), unneeded_resource_ids.len(), "Number of unneeded resources doesn't match");
+        
+        for (i, rrid) in parsed_unneeded_resource_ids.iter().enumerate() {
+            let expected_rrid = unneeded_resource_ids[i];
+            assert_eq!(**rrid, expected_rrid, "Unneeded resource at index {} doesn't match", i);
+        }
+    }
 
     Ok(())
 }
 
 #[test]
-fn test_compression() -> Result<(), Box<dyn std::error::Error>> {
-    test_package_with_resource(Some(4), false)
+fn test_simple_rpkg_v1() -> Result<(), Box<dyn std::error::Error>> {
+    test_package_with_resource(None, false, PackageVersion::RPKGv1, false, false)
 }
 
 #[test]
-fn test_scrambling() -> Result<(), Box<dyn std::error::Error>> {
-    test_package_with_resource(None, true)
+fn test_compression_rpkg_v1() -> Result<(), Box<dyn std::error::Error>> {
+    test_package_with_resource(Some(4), false, PackageVersion::RPKGv1, false, false)
 }
 
 #[test]
-fn test_compression_and_scrambling() -> Result<(), Box<dyn std::error::Error>> {
-    test_package_with_resource(Some(4), true)
+fn test_scrambling_rpkg_v1() -> Result<(), Box<dyn std::error::Error>> {
+    test_package_with_resource(None, true, PackageVersion::RPKGv1, false, false)
 }
+
+#[test]
+fn test_compression_and_scrambling_rpkg_v1() -> Result<(), Box<dyn std::error::Error>> {
+    test_package_with_resource(Some(4), true, PackageVersion::RPKGv1, false, false)
+}
+
+#[test]
+fn test_simple_rpkg_v2() -> Result<(), Box<dyn std::error::Error>> {
+    test_package_with_resource(None, false, PackageVersion::RPKGv2, false, false)
+}
+
+#[test]
+fn test_compression_rpkg_v2() -> Result<(), Box<dyn std::error::Error>> {
+    test_package_with_resource(Some(4), false, PackageVersion::RPKGv2, false, false)
+}
+
+#[test]
+fn test_scrambling_rpkg_v2() -> Result<(), Box<dyn std::error::Error>> {
+    test_package_with_resource(None, true, PackageVersion::RPKGv2, false, false)
+}
+
+#[test]
+fn test_compression_and_scrambling_rpkg_v2() -> Result<(), Box<dyn std::error::Error>> {
+    test_package_with_resource(Some(4), true, PackageVersion::RPKGv2, false, false)
+}
+
+#[test]
+fn test_patch_rpkg_v1() -> Result<(), Box<dyn std::error::Error>> {
+    test_package_with_resource(None, false, PackageVersion::RPKGv1, true, false)
+}
+
+#[test]
+fn test_compressed_and_scrambled_patch_rpkg_v1() -> Result<(), Box<dyn std::error::Error>> {
+    test_package_with_resource(Some(4), true, PackageVersion::RPKGv1, true, false)
+}
+
+#[test]
+fn test_legacy_rpkg_v1() -> Result<(), Box<dyn std::error::Error>> {
+    test_package_with_resource(None, false, PackageVersion::RPKGv1, false, true)
+}
+
+#[test]
+fn test_legacy_patch_rpkg_v1() -> Result<(), Box<dyn std::error::Error>> {
+    test_package_with_resource(None, false, PackageVersion::RPKGv1, true, true)
+}
+
+#[test]
+fn test_legacy_compressed_and_scrambled_patch_rpkg_v1() -> Result<(), Box<dyn std::error::Error>> {
+    test_package_with_resource(Some(4), true, PackageVersion::RPKGv1, true, true)
+}
+
+#[test]
+fn test_legacy_rpkg_v2() -> Result<(), Box<dyn std::error::Error>> {
+    test_package_with_resource(None, false, PackageVersion::RPKGv2, false, true)
+}
+
+#[test]
+fn test_legacy_patch_rpkg_v2() -> Result<(), Box<dyn std::error::Error>> {
+    test_package_with_resource(None, false, PackageVersion::RPKGv2, true, true)
+}
+
+#[test]
+fn test_legacy_compressed_and_scrambled_patch_rpkg_v2() -> Result<(), Box<dyn std::error::Error>> {
+    test_package_with_resource(Some(4), true, PackageVersion::RPKGv2, true, true)
+}
+

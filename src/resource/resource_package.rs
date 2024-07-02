@@ -2,7 +2,6 @@ use crate::resource::resource_info::ResourceInfo;
 use crate::resource::resource_package::ReferenceType::{INSTALL, NORMAL, WEAK};
 use binrw::{parser, BinRead, BinReaderExt, BinResult, binrw};
 use itertools::Itertools;
-use lz4::block::decompress_to_buffer;
 use memmap2::Mmap;
 use modular_bitfield::prelude::*;
 use std::fs::File;
@@ -11,6 +10,7 @@ use std::iter::zip;
 use std::path::{Path, PathBuf};
 use std::{fmt, io};
 use indexmap::IndexMap;
+use lzzzz::lz4;
 use thiserror::Error;
 
 use crate::resource::runtime_resource_id::RuntimeResourceID;
@@ -28,6 +28,9 @@ pub enum ResourcePackageError {
 
     #[error("Resource package has no source")]
     NoSource,
+
+    #[error("LZ4 decompression error: {0}")]
+    Lz4DecompressionError(#[from] lzzzz::Error),
 }
 
 pub enum ResourcePackageSource {
@@ -237,14 +240,9 @@ impl ResourcePackage {
         }
 
         if is_lz4ed {
-            let mut file = vec![0; resource.header.data_size as usize];
-            let size =
-                decompress_to_buffer(&buffer, Some(resource.header.data_size as i32), &mut file)
-                    .map_err(ResourcePackageError::IoError)?;
-
-            if size == resource.header.data_size as usize {
-                return Ok(file);
-            }
+            let mut decompressed_buffer = vec![0; resource.header.data_size as usize];
+            lz4::decompress(&buffer, &mut decompressed_buffer)?;
+            return Ok(decompressed_buffer);
         }
 
         Ok(buffer)
@@ -331,7 +329,7 @@ pub struct ResourceHeader {
 #[binrw]
 #[br(map = Self::from_bytes)]
 #[bw(map = |&x| Self::into_bytes(x))]
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct ResourceReferenceFlagsV1 {
     pub pad_0: B1,
     pub runtime_acquired: bool,
@@ -347,7 +345,7 @@ pub struct ResourceReferenceFlagsV1 {
 #[binrw]
 #[br(map = Self::from_bytes)]
 #[bw(map = |&x| Self::into_bytes(x))]
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct ResourceReferenceFlagsV2 {
     pub language_code: B5,
     pub runtime_acquired: bool,
@@ -363,7 +361,7 @@ pub enum ReferenceType {
     WEAK = 2,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum ResourceReferenceFlags {
     V1(ResourceReferenceFlagsV1),
     V2(ResourceReferenceFlagsV2),
