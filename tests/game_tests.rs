@@ -1,4 +1,5 @@
 use std::{fs, io};
+use std::fs::File;
 use std::path::PathBuf;
 use md5::{Digest, Md5};
 use rpkg_rs::resource::partition_manager::PartitionManager;
@@ -25,6 +26,50 @@ fn test_game_mounting(path_env_var: &str, game_version: WoaVersion) -> Result<()
 
     let packages = package_manager.partitions.iter().map(|p| p.packages.len()).sum::<usize>();
     assert!(packages > 0);
+    
+    // Ensure that for each package, the size and offset of the resource is within the expected range.
+    for partition in package_manager.partitions {
+        for (patch_id, package) in &partition.packages {
+            let package_name = partition.partition_info().filename(*patch_id);
+            
+            for (rrid, resource) in &package.resources {
+                let data_size = resource
+                    .compressed_size()
+                    .unwrap_or(resource.size());
+                
+                let data_offset = resource.data_offset();
+                
+                match &package.source {
+                    Some(ResourcePackageSource::File(path)) => {
+                        let file = File::open(path)?;
+                        let file_size = file.metadata()?.len();
+                        
+                        if data_offset >= file_size {
+                            return Err(format!("Resource '{}' offset for package '{}' of game '{:?}' is greater than the file size", rrid, package_name, game_version).into());
+                        }
+                        
+                        if data_offset + data_size as u64 > file_size {
+                            return Err(format!("Resource '{}' size for package '{}' of game '{:?}' is greater than the file size", rrid, package_name, game_version).into());
+                        }
+                    },
+                    
+                    Some(ResourcePackageSource::Memory(buffer)) => {
+                        let buffer_size = buffer.len();
+                        
+                        if data_offset >= buffer_size as u64 {
+                            return Err(format!("Resource '{}' offset for package '{}' of game '{:?}' is greater than the buffer size", rrid, package_name, game_version).into());
+                        }
+                        
+                        if data_offset + data_size as u64 > buffer_size as u64 {
+                            return Err(format!("Resource '{}' size for package '{}' of game '{:?}' is greater than the buffer size", rrid, package_name, game_version).into());
+                        }
+                    },
+                    
+                    None => return Err(format!("Package '{}' of game '{:?}' has no source", package_name, game_version).into()),
+                };
+            }
+        }
+    }
     
     Ok(())
 }
