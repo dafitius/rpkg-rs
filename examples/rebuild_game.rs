@@ -39,7 +39,7 @@ fn main() {
 
     // Mount the game.
     println!("Mounting game...");
-    let package_manager = PartitionManager::mount_game(retail_path, game_version, true, |_, _| {})
+    let package_manager = PartitionManager::mount_game(retail_path, game_version, true)
         .unwrap_or_else(|e| {
             eprintln!("failed to mount game: {}", e);
             std::process::exit(0);
@@ -82,7 +82,7 @@ fn main() {
                 });
 
             // After it's built, check if the generated file is the same as the original.
-            let original_file = match &package.source {
+            let original_file = match &package.source() {
                 Some(ResourcePackageSource::File(path)) => path,
                 _ => panic!(
                     "Package '{}' of game '{:?}' has no source",

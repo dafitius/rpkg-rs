@@ -54,7 +54,7 @@ fn main() {
     }
 
     let mut package_manager =
-        PartitionManager::new(game_paths.runtime_path, package_definition_source).unwrap_or_else(
+        PartitionManager::new(game_paths.runtime_path, &package_definition_source).unwrap_or_else(
             |e| {
                 eprintln!("failed to init package manager: {}", e);
                 std::process::exit(0);

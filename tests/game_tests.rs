@@ -19,7 +19,7 @@ fn test_game_mounting(
     };
 
     let package_manager =
-        PartitionManager::mount_game(game_retail_path, game_version, true, |_, _| {})?;
+        PartitionManager::mount_game(game_retail_path, game_version, true)?;
 
     assert!(package_manager.partitions.len() > 0);
 
@@ -35,12 +35,12 @@ fn test_game_mounting(
         for (patch_id, package) in &partition.packages {
             let package_name = partition.partition_info().filename(*patch_id);
 
-            for (rrid, resource) in &package.resources {
+            for (rrid, resource) in package.resources() {
                 let data_size = resource.compressed_size().unwrap_or(resource.size());
 
                 let data_offset = resource.data_offset();
 
-                match &package.source {
+                match &package.source() {
                     Some(ResourcePackageSource::File(path)) => {
                         let file = File::open(path)?;
                         let file_size = file.metadata()?.len();
@@ -118,7 +118,7 @@ fn test_game_rebuild(
 
     // Mount the game.
     let package_manager =
-        PartitionManager::mount_game(game_retail_path, game_version, true, |_, _| {})?;
+        PartitionManager::mount_game(game_retail_path, game_version, true)?;
 
     // Rebuild each package one by one.
     for partition in package_manager.partitions {
@@ -151,7 +151,7 @@ fn test_game_rebuild(
             )?;
 
             // After it's built, check if the generated file is the same as the original.
-            let original_file = match &package.source {
+            let original_file = match &package.source() {
                 Some(ResourcePackageSource::File(path)) => path,
                 _ => Err(format!(
                     "Package '{}' of game '{:?}' has no source",

@@ -21,6 +21,8 @@ use indexmap::{IndexMap, IndexSet};
 use lzzzz::{lz4, lz4_hc};
 use thiserror::Error;
 
+/// `PackageResourceBlob` is an enum representing various types of package resource stores, which can 
+/// include files, file sections, and memory buffers, optionally compressed or scrambled.
 enum PackageResourceBlob {
     File {
         path: PathBuf,
@@ -708,14 +710,14 @@ impl PackageBuilder {
 
                     for (_, flags) in &resource.references {
                         flags
-                            .as_v1()
+                            .to_v1()
                             .write(writer)
                             .map_err(PackageBuilderError::SerializationError)?;
                     }
                 } else {
                     for (_, flags) in &resource.references {
                         flags
-                            .as_v2()
+                            .to_v2()
                             .write(writer)
                             .map_err(PackageBuilderError::SerializationError)?;
                     }

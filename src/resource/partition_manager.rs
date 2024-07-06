@@ -68,12 +68,26 @@ impl PartitionManager {
     /// # Arguments
     /// - `retail_path` - The path to the game's retail directory.
     /// - `game_version` - The version of the game.
-    /// - `automount` - Whether to automount the partitions.
-    /// - `progress_callback` - A callback function that will be called with the current mounting progress.
-    pub fn mount_game<F>(
+    /// - `mount` - Indicates whether to automatically mount the partitions, can eliminate the need to call `mount_partitions` separately
+    pub fn mount_game(
         retail_directory: PathBuf,
         game_version: WoaVersion,
-        automount: bool,
+        mount: bool,
+    ) -> Result<Self, PackageManagerError> {
+        Self::mount_game_with_callback(retail_directory, game_version, mount, |_, _| {})
+    }
+
+    /// Create a new PartitionManager by mounting the game at the given path.
+    ///
+    /// # Arguments
+    /// - `retail_path` - The path to the game's retail directory.
+    /// - `game_version` - The version of the game.
+    /// - `mount` - Indicates whether to automatically mount the partitions, can eliminate the need to call `mount_partitions` separately
+    /// - `progress_callback` - A callback function that will be called with the current mounting progress.
+    pub fn mount_game_with_callback<F>(
+        retail_directory: PathBuf,
+        game_version: WoaVersion,
+        mount: bool,
         progress_callback: F,
     ) -> Result<Self, PackageManagerError>
     where
@@ -94,8 +108,8 @@ impl PartitionManager {
             partitions: vec![],
         };
 
-        // If the user requested automounting, do it.
-        if automount {
+        // If the user requested auto mounting, do it.
+        if mount {
             package_manager.mount_partitions(progress_callback)?;
         }
 
@@ -123,7 +137,7 @@ impl PartitionManager {
         };
 
         partition
-            .mount_resource_packages_in_partition_with_hook(runtime_directory, callback)
+            .mount_resource_packages_in_partition_with_callback(runtime_directory, callback)
             .map_err(|e| PackageManagerError::PartitionError(partition_info.id(), e))?;
 
         if state_result.mounted {

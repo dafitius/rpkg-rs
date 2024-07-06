@@ -5,7 +5,6 @@ use crate::{utils, GlacierResource, GlacierResourceError, WoaVersion};
 use lazy_regex::regex::Regex;
 use std::cmp::Ordering;
 use std::fmt::Debug;
-use std::path::PathBuf;
 use std::{collections::HashMap, path::Path};
 use std::{fmt, io};
 use thiserror::Error;
@@ -66,8 +65,6 @@ impl PartialOrd for PatchId {
 
 pub struct ResourcePartition {
     info: PartitionInfo,
-    mount_location: Option<PathBuf>,
-
     pub packages: HashMap<PatchId, ResourcePackage>,
     resources: HashMap<RuntimeResourceID, PatchId>,
 }
@@ -76,7 +73,6 @@ impl ResourcePartition {
     pub fn new(info: PartitionInfo) -> Self {
         Self {
             info,
-            mount_location: None,
             packages: Default::default(),
             resources: Default::default(),
         }
@@ -118,10 +114,10 @@ impl ResourcePartition {
         &mut self,
         runtime_path: &Path,
     ) -> Result<(), ResourcePartitionError> {
-        self.mount_resource_packages_in_partition_with_hook(runtime_path, |_| {})
+        self.mount_resource_packages_in_partition_with_callback(runtime_path, |_| {})
     }
 
-    pub fn mount_resource_packages_in_partition_with_hook<F>(
+    pub fn mount_resource_packages_in_partition_with_callback<F>(
         &mut self,
         runtime_path: &Path,
         mut progress_callback: F,
@@ -159,8 +155,6 @@ impl ResourcePartition {
         state.installing = false;
         state.mounted = true;
         progress_callback(&state);
-
-        self.mount_location = Some(runtime_path.to_path_buf());
 
         Ok(())
     }

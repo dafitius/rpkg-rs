@@ -86,7 +86,7 @@ fn test_package_with_resource(
     assert_eq!(resource_data, fake_data, "Resource data doesn't match");
 
     // Check that the references are correct and in the right order.
-    let resource_info = package.resources.get(&rrid).unwrap();
+    let resource_info = package.resources().get(&rrid).unwrap();
 
     for (i, (rrid, flags)) in resource_info.references().iter().enumerate() {
         let reference = references[i];

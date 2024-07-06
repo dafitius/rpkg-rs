@@ -34,7 +34,7 @@ fn main() {
         std::process::exit(0)
     });
 
-    let resource_info = rpkg.resources.get(&rrid).unwrap_or_else(|| {
+    let resource_info = rpkg.resources().get(&rrid).unwrap_or_else(|| {
         println!("Failed to get resource info.");
         std::process::exit(0)
     });

@@ -52,7 +52,7 @@ pub enum PackageVersion {
 #[brw(little, import(is_patch: bool))]
 pub struct ResourcePackage {
     #[brw(ignore)]
-    pub source: Option<ResourcePackageSource>,
+    pub(crate) source: Option<ResourcePackageSource>,
 
     pub(crate) magic: [u8; 4],
 
@@ -60,7 +60,7 @@ pub struct ResourcePackage {
     #[bw(if (magic == b"2KPR"))]
     pub(crate) metadata: Option<PackageMetadata>,
 
-    pub header: PackageHeader,
+    pub(crate) header: PackageHeader,
 
     #[brw(if(is_patch))]
     pub(crate) unneeded_resource_count: u32,
@@ -76,7 +76,7 @@ pub struct ResourcePackage {
 
     #[br(parse_with = resource_parser, args(header.file_count))]
     #[bw(write_with = empty_writer)]
-    pub resources: IndexMap<RuntimeResourceID, ResourceInfo>,
+    pub(crate) resources: IndexMap<RuntimeResourceID, ResourceInfo>,
 }
 
 #[parser(reader: reader, endian)]
@@ -151,6 +151,16 @@ impl ResourcePackage {
             b"2KPR" => PackageVersion::RPKGv2,
             _ => panic!("Unknown package version"),
         }
+    }
+
+    /// Returns the source of the package.
+    pub fn source(&self) -> Option<&ResourcePackageSource> {
+        self.source.as_ref()
+    }
+
+    /// Returns a map of the RuntimeResourceIds and their resource information.
+    pub fn resources(&self) -> &IndexMap<RuntimeResourceID, ResourceInfo> {
+        &self.resources
     }
 
     /// Returns whether the package uses the legacy references format.
@@ -353,52 +363,64 @@ pub enum ReferenceType {
     WEAK = 2,
 }
 
+
+/// Reference flags for a given resource, defines the metadata of a reference
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum ResourceReferenceFlags {
     V1(ResourceReferenceFlagsV1),
     V2(ResourceReferenceFlagsV2),
 }
 
-impl ResourceReferenceFlags {
-    pub fn as_v1(&self) -> ResourceReferenceFlagsV1 {
-        match self {
-            ResourceReferenceFlags::V1(b) => *b,
-            ResourceReferenceFlags::V2(b) => {
-                let mut flags = ResourceReferenceFlagsV1::new();
-
-                // TODO: Validate that this logic is correct.
-                flags = flags.with_runtime_acquired(b.runtime_acquired());
-                flags = flags.with_weak_reference(b.reference_type() == WEAK);
-                flags = flags.with_install_dependency(b.reference_type() == INSTALL);
-
-                flags
-            }
+impl From<ResourceReferenceFlags> for ResourceReferenceFlagsV1{
+    fn from(value: ResourceReferenceFlags) -> Self {
+        match value {
+            ResourceReferenceFlags::V1(b) => b,
+            ResourceReferenceFlags::V2(b) => ResourceReferenceFlagsV1::new()
+                .with_runtime_acquired(b.runtime_acquired())
+                .with_weak_reference(b.reference_type() == WEAK)
+                .with_install_dependency(b.reference_type() == INSTALL),
         }
     }
+}
 
-    pub fn as_v2(&self) -> ResourceReferenceFlagsV2 {
-        match self {
-            ResourceReferenceFlags::V2(b) => *b,
-            ResourceReferenceFlags::V1(b) => {
-                let mut flags = ResourceReferenceFlagsV2::new();
-
-                flags = flags.with_language_code(0x1F);
-                flags = flags.with_runtime_acquired(b.runtime_acquired());
-
-                // TODO: Validate that this logic is correct.
-                let reference_type = if b.install_dependency() {
-                    INSTALL
-                } else if b.weak_reference() {
-                    WEAK
-                } else {
-                    NORMAL
-                };
-
-                flags = flags.with_reference_type(reference_type);
-
-                flags
-            }
+impl From<ResourceReferenceFlags> for ResourceReferenceFlagsV2{
+    fn from(value: ResourceReferenceFlags) -> Self {
+        match value {
+            ResourceReferenceFlags::V2(b) => b,
+            ResourceReferenceFlags::V1(b) => ResourceReferenceFlagsV2::new()
+                .with_language_code(0x1F)
+                .with_runtime_acquired(b.runtime_acquired())
+                .with_reference_type(value.reference_type()),
         }
+    }
+}
+
+impl ResourceReferenceFlags {
+    
+    /// ```
+    /// # use rpkg_rs::resource::resource_package::*;
+    /// # fn main(){
+    ///     let flag_v1 = ResourceReferenceFlagsV1::new().with_install_dependency(true).with_runtime_acquired(true);
+    ///     let flag_v2 = ResourceReferenceFlagsV2::new().with_reference_type(ReferenceType::INSTALL).with_runtime_acquired(true);
+    ///
+    ///     assert_eq!(flag_v1, ResourceReferenceFlags::V2(flag_v2).to_v1());
+    /// # }
+    /// ```
+    pub fn to_v1(&self) -> ResourceReferenceFlagsV1 {
+        (*self).into()
+    }
+    
+    /// ```
+    /// # use rpkg_rs::resource::resource_package::*;
+    /// # fn main(){
+    ///     let flag_v1 = ResourceReferenceFlagsV1::new().with_install_dependency(true).with_runtime_acquired(true);
+    ///     let flag_v2 = ResourceReferenceFlagsV2::new().with_reference_type(ReferenceType::INSTALL).with_runtime_acquired(true).with_language_code(0x1F);
+    ///
+    ///     assert_eq!(flag_v2, ResourceReferenceFlags::V1(flag_v1).to_v2());
+    /// # }
+    /// ```
+    pub fn to_v2(&self) -> ResourceReferenceFlagsV2 {
+        (*self).into()
     }
 }
 
@@ -419,15 +441,11 @@ impl ResourceReferenceFlags {
 
     pub fn reference_type(&self) -> ReferenceType {
         match self {
-            ResourceReferenceFlags::V1(b) => {
-                if b.weak_reference() {
-                    WEAK
-                } else if b.install_dependency() {
-                    INSTALL
-                } else {
-                    NORMAL
-                }
-            }
+            ResourceReferenceFlags::V1(b) => match b.install_dependency() {
+                true => INSTALL,
+                false if b.weak_reference() => WEAK,
+                false => NORMAL,
+            },
             ResourceReferenceFlags::V2(b) => b.reference_type(),
         }
     }
@@ -507,4 +525,27 @@ impl fmt::Display for ResourceHeader {
 fn empty_writer<T>(_: &T) -> BinResult<()> {
     // This does nothing because the actual implementation is in the `PackageBuilder` struct.
     Ok(())
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_flag_conversion_801f() {
+        let flag_v1 = ResourceReferenceFlagsV1::from_bytes([0x80]);
+        let flag_v2 = ResourceReferenceFlagsV2::from_bytes([0x1F]);
+
+        assert_eq!(flag_v1, ResourceReferenceFlags::V2(flag_v2).to_v1());
+        assert_eq!(flag_v2, ResourceReferenceFlags::V1(flag_v1).to_v2());
+    }
+
+    #[test]
+    fn test_flag_conversion_005f() {
+        let flag_v1 = ResourceReferenceFlagsV1::from_bytes([0x00]);
+        let flag_v2 = ResourceReferenceFlagsV2::from_bytes([0x5F]);
+
+        assert_eq!(flag_v1, ResourceReferenceFlags::V2(flag_v2).to_v1());
+        assert_eq!(flag_v2, ResourceReferenceFlags::V1(flag_v1).to_v2());
+    }
 }
