@@ -5,12 +5,12 @@ use indexmap::IndexMap;
 use itertools::Itertools;
 use lzzzz::lz4;
 use memmap2::Mmap;
-use modular_bitfield::prelude::*;
 use std::fs::File;
 use std::io::{Cursor, Read, Seek};
 use std::iter::zip;
 use std::path::{Path, PathBuf};
 use std::{fmt, io};
+use bitfield_struct::bitfield;
 use thiserror::Error;
 
 use crate::resource::runtime_resource_id::RuntimeResourceID;
@@ -277,13 +277,12 @@ pub struct PackageHeader {
     pub metadata_table_size: u32,
 }
 
-#[bitfield]
+#[bitfield(u32)]
 #[binrw]
-#[br(map = Self::from_bytes)]
-#[bw(map = |&x| Self::into_bytes(x))]
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Eq, PartialEq)]
 pub struct PackageOffsetFlags {
-    pub compressed_size: B31,
+    #[bits(31)]
+    pub compressed_size: u32,
     pub is_scrambled: bool,
 }
 
@@ -327,40 +326,52 @@ pub struct ResourceHeader {
     pub references: Vec<(RuntimeResourceID, ResourceReferenceFlags)>,
 }
 
-#[bitfield]
+#[bitfield(u8)]
 #[binrw]
-#[br(map = Self::from_bytes)]
-#[bw(map = |&x| Self::into_bytes(x))]
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[bw(map = |&x| Self::into_bits(x))]
+#[derive(Eq, PartialEq)]
 pub struct ResourceReferenceFlagsV1 {
-    pub pad_0: B1,
+    pub __: bool,
     pub runtime_acquired: bool,
     pub weak_reference: bool,
-    pub pad_1: B1,
+    pub __: bool,
     pub type_of_streaming_entity: bool,
     pub state_streamed: bool,
     pub media_streamed: bool,
     pub install_dependency: bool,
 }
 
-#[bitfield]
+#[bitfield(u8)]
 #[binrw]
-#[br(map = Self::from_bytes)]
-#[bw(map = |&x| Self::into_bytes(x))]
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(Eq, PartialEq)]
+#[bw(map = |&x: &Self| x.into_bits())]
 pub struct ResourceReferenceFlagsV2 {
-    pub language_code: B5,
+    #[bits(5, default = 0x1F)]
+    pub language_code: u8,
     pub runtime_acquired: bool,
-    #[bits = 2]
+    #[bits(2)]
     pub reference_type: ReferenceType,
 }
 
-#[derive(BitfieldSpecifier, Debug, Copy, Clone, Eq, PartialEq)]
-#[bits = 2]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum ReferenceType {
     INSTALL = 0,
     NORMAL = 1,
     WEAK = 2,
+}
+
+impl ReferenceType {
+    const fn into_bits(self) -> u16 {
+        self as _
+    }
+    const fn from_bits(value: u8) -> Self {
+        match value {
+            0 => INSTALL,
+            1 => NORMAL,
+            2 => WEAK,
+            _ => NORMAL,
+        }
+    }
 }
 
 
@@ -451,13 +462,13 @@ impl ResourceReferenceFlags {
     }
 }
 
-#[bitfield]
+#[bitfield(u32)]
 #[binrw]
-#[br(map = Self::from_bytes)]
-#[bw(map = |&x| Self::into_bytes(x))]
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Eq, PartialEq)]
+#[bw(map = |&x: &Self| x.into_bits())]
 pub struct ResourceReferenceCountAndFlags {
-    pub reference_count: B30,
+    #[bits(30)]
+    pub reference_count: u32,
     pub is_new_format: bool,
     pub always_true: bool,
 }
@@ -533,8 +544,8 @@ mod tests {
     use super::*;
     #[test]
     fn test_flag_conversion_801f() {
-        let flag_v1 = ResourceReferenceFlagsV1::from_bytes([0x80]);
-        let flag_v2 = ResourceReferenceFlagsV2::from_bytes([0x1F]);
+        let flag_v1 = ResourceReferenceFlagsV1::from_bits(0x80);
+        let flag_v2 = ResourceReferenceFlagsV2::from_bits(0x1F);
 
         assert_eq!(flag_v1, ResourceReferenceFlags::V2(flag_v2).to_v1());
         assert_eq!(flag_v2, ResourceReferenceFlags::V1(flag_v1).to_v2());
@@ -542,8 +553,8 @@ mod tests {
 
     #[test]
     fn test_flag_conversion_005f() {
-        let flag_v1 = ResourceReferenceFlagsV1::from_bytes([0x00]);
-        let flag_v2 = ResourceReferenceFlagsV2::from_bytes([0x5F]);
+        let flag_v1 = ResourceReferenceFlagsV1::from_bits(0x00);
+        let flag_v2 = ResourceReferenceFlagsV2::from_bits(0x5F);
 
         assert_eq!(flag_v1, ResourceReferenceFlags::V2(flag_v2).to_v1());
         assert_eq!(flag_v2, ResourceReferenceFlags::V1(flag_v1).to_v2());
