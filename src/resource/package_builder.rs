@@ -163,7 +163,7 @@ impl PackageResourceBuilder {
     /// * `size` - The size of the data.
     /// * `compressed_size` - The compressed size of the data, if the resource is compressed.
     /// * `is_scrambled` - Whether the data is scrambled.
-    pub fn from_file_at_offset(
+    fn from_file_at_offset(
         rrid: RuntimeResourceID,
         resource_type: &str,
         path: &Path,
@@ -211,7 +211,7 @@ impl PackageResourceBuilder {
     /// * `data` - The data of the resource.
     /// * `decompressed_size` - The decompressed size of the data, if the resource is compressed.
     /// * `is_scrambled` - Whether the data is scrambled.
-    pub fn from_compressed_memory(
+    fn from_compressed_memory(
         rrid: RuntimeResourceID,
         resource_type: &str,
         data: Vec<u8>,
