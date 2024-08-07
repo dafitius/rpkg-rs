@@ -83,7 +83,7 @@ impl ResourcePartition {
     }
 
     /// search through the package_dir to figure out which patch indices are there.
-    /// We have to use this inside of using the patchlevel inside the PartitionInfo.
+    /// We have to use this instead of using the patchlevel inside the PartitionInfo.
     fn read_patch_indices(
         &self,
         package_dir: &Path,
@@ -114,6 +114,11 @@ impl ResourcePartition {
         Ok(patch_indices)
     }
 
+    /// Mounts resource packages in the partition.
+    ///
+    /// This function attempts to mount all necessary resource packages into the current partition.
+    /// If successful, the resources will be available for use within the partition.
+    /// This function will fail silently when this package can't be found inside runtime directory
     pub fn mount_resource_packages_in_partition(
         &mut self,
         runtime_path: &Path,
@@ -121,6 +126,11 @@ impl ResourcePartition {
         self.mount_resource_packages_in_partition_with_hook(runtime_path, |_| {})
     }
 
+    /// Mounts resource packages in the partition with a callback.
+    ///
+    /// This function attempts to mount all necessary resource packages into the current partition.
+    /// If successful, the resources will be available for use within the partition.
+    /// This function will fail silently when this package can't be found inside runtime directory.
     pub fn mount_resource_packages_in_partition_with_hook<F>(
         &mut self,
         runtime_path: &Path,
@@ -135,11 +145,12 @@ impl ResourcePartition {
             install_progress: 0.0,
         };
 
-        //maybe don't error on a missing partition? the game doesn't...
-        //let patch_indices = self.read_patch_indices(runtime_path)?;
+        //The process can silently fail here. You are able to detect this using a callback.
+        //This behaviour was chosen because the game is able to refer to non-installed partitions in its packagedefs file.
         let patch_idx_result = self.read_patch_indices(runtime_path);
         if patch_idx_result.is_err() {
             state.installing = false;
+            progress_callback(&state);
             return Ok(());
         }
 

@@ -46,6 +46,9 @@ fn main() {
                 last_index = current;
                 print!("Mounting partition {} ", current);
             }
+            if !state.installing && !state.mounted {
+                println!("[Failed to mount this partition. Is it installed?]");
+            }
             let install_progress = (state.install_progress * 10.0).ceil() / 10.0;
 
             let chars_to_add = (install_progress * 10.0 - progress * 10.0) as usize * 2;
