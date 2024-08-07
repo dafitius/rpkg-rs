@@ -49,6 +49,12 @@ impl From<u64> for RuntimeResourceID {
     }
 }
 
+impl From<RuntimeResourceID> for u64 {
+    fn from(value: RuntimeResourceID) -> Self {
+        value.id
+    }
+}
+
 impl From<ResourceID> for RuntimeResourceID {
     fn from(value: ResourceID) -> Self {
         Self::from_resource_id(&value)
