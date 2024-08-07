@@ -47,38 +47,10 @@ pub trait GlacierResource: Sized {
         data: R,
     ) -> Result<Self::Output, GlacierResourceError>;
 
-    fn serialize(
-        _: &Self::Output,
-        woa_version: WoaVersion,
-    ) -> Result<Vec<u8>, GlacierResourceError>;
+    fn serialize(&self, woa_version: WoaVersion) -> Result<Vec<u8>, GlacierResourceError>;
 
-    fn video_memory_requirement(_: &Self::Output) -> u64;
-    fn system_memory_requirement(_: &Self::Output) -> u64;
-}
-
-impl<I> GlacierResource for I
-where
-    I: IntoIterator<Item = u8>,
-{
-    type Output = Vec<u8>;
-
-    fn process_data<R: AsRef<[u8]>>(
-        _: WoaVersion,
-        data: R,
-    ) -> Result<Self::Output, GlacierResourceError> {
-        let data: Vec<_> = data.as_ref().to_vec();
-        Ok(data)
-    }
-
-    fn serialize(resource: &Self::Output, _: WoaVersion) -> Result<Vec<u8>, GlacierResourceError> {
-        Ok(resource.clone())
-    }
-
-    fn video_memory_requirement(_: &Self::Output) -> u64 {
-        u64::MAX
-    }
-
-    fn system_memory_requirement(_: &Self::Output) -> u64 {
-        u64::MAX
-    }
+    fn resource_type(&self) -> [u8; 4];
+    fn video_memory_requirement(&self) -> u64;
+    fn system_memory_requirement(&self) -> u64;
+    fn should_scramble(&self) -> bool;
 }

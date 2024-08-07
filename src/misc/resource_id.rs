@@ -10,8 +10,8 @@
 //! ```
 
 use crate::resource::runtime_resource_id::RuntimeResourceID;
-use std::str::FromStr;
 use lazy_regex::regex;
+use std::str::FromStr;
 use thiserror::Error;
 
 #[cfg(feature = "serde")]

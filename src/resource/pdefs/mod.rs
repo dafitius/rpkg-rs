@@ -1,21 +1,23 @@
-pub mod h2016_parser;
-pub mod hm2_parser;
-pub mod hm3_parser;
+use std::fmt::Display;
+use std::path::PathBuf;
+use std::str::FromStr;
 
 use lazy_regex::regex;
-use crate::resource::resource_partition::PatchId;
-use std::fmt::Display;
-use std::str::FromStr;
-use thiserror::Error;
-
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 use crate::encryption::xtea::XteaError;
+use crate::misc::ini_file_system::{IniFileError, IniFileSystem};
 use crate::misc::resource_id::ResourceID;
 use crate::resource::pdefs::PackageDefinitionSource::{HM2, HM2016, HM3};
 use crate::resource::pdefs::PartitionType::{Dlc, LanguageDlc, LanguageStandard, Standard};
+use crate::resource::resource_partition::PatchId;
 use crate::WoaVersion;
+
+pub mod h2016_parser;
+pub mod hm2_parser;
+pub mod hm3_parser;
 
 #[derive(Debug, Error)]
 pub enum PackageDefinitionError {
@@ -27,6 +29,9 @@ pub enum PackageDefinitionError {
 
     #[error("Invalid packagedefintiion file: ({0})")]
     UnexpectedFormat(String),
+
+    #[error("Failed to read packagedefinition.txt: {0}")]
+    FailedToRead(#[from] std::io::Error),
 }
 
 #[derive(Debug, Error)]
@@ -234,6 +239,27 @@ impl PackageDefinitionSource {
         }
     }
 
+    /// Parses a packagedefinition.txt file.
+    ///
+    /// # Arguments
+    /// - `path` - The path to the packagedefinition.txt file.
+    /// - `game_version` - The version of the game.
+    pub fn from_file(
+        path: PathBuf,
+        game_version: WoaVersion,
+    ) -> Result<Self, PackageDefinitionError> {
+        let package_definition_data =
+            std::fs::read(path.as_path()).map_err(PackageDefinitionError::FailedToRead)?;
+
+        let package_definition = match game_version {
+            WoaVersion::HM2016 => PackageDefinitionSource::HM2016(package_definition_data),
+            WoaVersion::HM2 => PackageDefinitionSource::HM2(package_definition_data),
+            WoaVersion::HM3 => PackageDefinitionSource::HM3(package_definition_data),
+        };
+
+        Ok(package_definition)
+    }
+
     pub fn read(&self) -> Result<Vec<PartitionInfo>, PackageDefinitionError> {
         match self {
             PackageDefinitionSource::Custom(vec) => Ok(vec.clone()),
@@ -241,5 +267,60 @@ impl PackageDefinitionSource {
             PackageDefinitionSource::HM2(vec) => hm2_parser::HM2Parser::parse(vec),
             PackageDefinitionSource::HM2016(vec) => h2016_parser::H2016Parser::parse(vec),
         }
+    }
+}
+
+pub struct GamePaths {
+    pub project_path: PathBuf,
+    pub runtime_path: PathBuf,
+    pub package_definition_path: PathBuf,
+}
+
+#[derive(Debug, Error)]
+pub enum GameDiscoveryError {
+    #[error("No thumbs.dat file found")]
+    NoThumbsFile,
+
+    #[error("No RUNTIME_PATH found in thumbs.dat")]
+    NoRuntimePath,
+
+    #[error("No PROJECT_PATH found in thumbs.dat")]
+    NoProjectPath,
+
+    #[error("Failed to parse the thumbs.dat file: {0}")]
+    FailedToParseThumbsFile(#[from] IniFileError),
+}
+
+impl GamePaths {
+    /// Tries to discover the game's paths given its retail directory.
+    ///
+    /// # Arguments
+    /// - `retail_directory` - The path to the game's retail directory.
+    pub fn from_retail_directory(retail_directory: PathBuf) -> Result<Self, GameDiscoveryError> {
+        let thumbs_path = retail_directory.join("thumbs.dat");
+
+        // Parse the thumbs file, so we can find the runtime path.
+        let thumbs = IniFileSystem::from(thumbs_path.as_path())
+            .map_err(GameDiscoveryError::FailedToParseThumbsFile)?;
+
+        let app_options = &thumbs.root()["application"];
+        let project_path = app_options
+            .options()
+            .get("PROJECT_PATH")
+            .ok_or(GameDiscoveryError::NoProjectPath)?;
+        let relative_runtime_path = app_options
+            .options()
+            .get("RUNTIME_PATH")
+            .ok_or(GameDiscoveryError::NoRuntimePath)?;
+        let runtime_path = retail_directory
+            .join(project_path)
+            .join(relative_runtime_path);
+        let package_definition_path = runtime_path.join("packagedefinition.txt");
+
+        Ok(Self {
+            project_path: retail_directory.join(project_path),
+            runtime_path,
+            package_definition_path,
+        })
     }
 }

@@ -2,6 +2,7 @@
 //! Can be derived from a [ResourceID] md5 digest
 
 use crate::misc::resource_id::ResourceID;
+use binrw::binrw;
 use md5::{Digest, Md5};
 use std::fmt;
 use std::fmt::{Debug, Formatter};
@@ -25,6 +26,8 @@ pub enum RuntimeResourceIDError {
 /// Represents a runtime resource identifier.
 #[derive(Default, PartialEq, Eq, Hash, Clone, Copy)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[binrw]
+#[brw(little)]
 pub struct RuntimeResourceID {
     #[cfg_attr(feature = "serde", serde(with = "SerHex::<StrictPfx>"))]
     id: u64,

@@ -18,7 +18,7 @@ impl ResourceInfo {
     }
 
     pub fn data_type(&self) -> String {
-        String::from_utf8_lossy(&self.header.m_type)
+        String::from_utf8_lossy(&self.header.resource_type)
             .into_owned()
             .chars()
             .rev()
@@ -47,7 +47,7 @@ impl ResourceInfo {
     }
 
     /// will return None is the resource is not compressed
-    pub fn compressed_size(&self) -> Option<usize> {
+    pub fn compressed_size(&self) -> Option<u32> {
         self.entry.compressed_size()
     }
 

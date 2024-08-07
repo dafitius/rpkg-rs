@@ -29,14 +29,36 @@ fn main() {
     });
 
     println!("Extracting the resource");
-    let file = rpkg
-        .read_resource(&package_path, &rrid)
-        .unwrap_or_else(|e| {
-            println!("Failed extract resource: {}", e);
-            std::process::exit(0)
-        });
+    let file = rpkg.read_resource(&rrid).unwrap_or_else(|e| {
+        println!("Failed extract resource: {}", e);
+        std::process::exit(0)
+    });
+
+    let resource_info = rpkg.resources().get(&rrid).unwrap_or_else(|| {
+        println!("Failed to get resource info.");
+        std::process::exit(0)
+    });
 
     println!("Resource extracted!");
+    println!("Resource type: {:?}", resource_info.data_type());
+    println!("Resource size: {}", resource_info.size());
+    println!(
+        "System memory requirement: {}",
+        resource_info.system_memory_requirement()
+    );
+    println!(
+        "Video memory requirement: {}",
+        resource_info.video_memory_requirement()
+    );
+    println!("References: {}", resource_info.references().len());
+
+    for (rrid, flags) in resource_info.references() {
+        println!("[+] Ref {}", rrid);
+        println!("    Language code: {:?}", flags.language_code());
+        println!("    Is acquired: {}", flags.is_acquired());
+        println!("    Reference type: {:?}", flags.reference_type());
+    }
+
     match std::str::from_utf8(&*file) {
         Ok(s) => {
             println!("{}...", s.chars().take(100).collect::<String>())
