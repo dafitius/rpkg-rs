@@ -19,7 +19,7 @@ fn test_game_mounting(
     };
 
     let package_manager =
-        PartitionManager::mount_game(game_retail_path, game_version, true)?;
+        PartitionManager::from_game(game_retail_path, game_version, true)?;
 
     assert!(package_manager.partitions.len() > 0);
 
@@ -118,7 +118,7 @@ fn test_game_rebuild(
 
     // Mount the game.
     let package_manager =
-        PartitionManager::mount_game(game_retail_path, game_version, true)?;
+        PartitionManager::from_game(game_retail_path, game_version, true)?;
 
     // Rebuild each package one by one.
     for partition in package_manager.partitions {

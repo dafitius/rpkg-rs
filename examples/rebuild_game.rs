@@ -39,7 +39,7 @@ fn main() {
 
     // Mount the game.
     println!("Mounting game...");
-    let package_manager = PartitionManager::mount_game(retail_path, game_version, true)
+    let package_manager = PartitionManager::from_game(retail_path, game_version, true)
         .unwrap_or_else(|e| {
             eprintln!("failed to mount game: {}", e);
             std::process::exit(0);

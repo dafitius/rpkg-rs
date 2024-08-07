@@ -69,12 +69,12 @@ impl PartitionManager {
     /// - `retail_path` - The path to the game's retail directory.
     /// - `game_version` - The version of the game.
     /// - `mount` - Indicates whether to automatically mount the partitions, can eliminate the need to call `mount_partitions` separately
-    pub fn mount_game(
+    pub fn from_game(
         retail_directory: PathBuf,
         game_version: WoaVersion,
         mount: bool,
     ) -> Result<Self, PackageManagerError> {
-        Self::mount_game_with_callback(retail_directory, game_version, mount, |_, _| {})
+        Self::from_game_with_callback(retail_directory, game_version, mount, |_, _| {})
     }
 
     /// Create a new PartitionManager by mounting the game at the given path.
@@ -84,7 +84,7 @@ impl PartitionManager {
     /// - `game_version` - The version of the game.
     /// - `mount` - Indicates whether to automatically mount the partitions, can eliminate the need to call `mount_partitions` separately
     /// - `progress_callback` - A callback function that will be called with the current mounting progress.
-    pub fn mount_game_with_callback<F>(
+    pub fn from_game_with_callback<F>(
         retail_directory: PathBuf,
         game_version: WoaVersion,
         mount: bool,
