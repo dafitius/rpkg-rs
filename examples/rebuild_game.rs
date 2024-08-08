@@ -2,7 +2,6 @@ use md5::{Digest, Md5};
 use rpkg_rs::resource::package_builder::PackageBuilder;
 use rpkg_rs::resource::partition_manager::PartitionManager;
 use rpkg_rs::resource::resource_package::ResourcePackageSource;
-use rpkg_rs::resource::resource_partition::PatchId;
 use rpkg_rs::WoaVersion;
 use std::path::PathBuf;
 use std::{env, fs, io};
@@ -61,20 +60,16 @@ fn main() {
                 std::process::exit(0);
             });
 
-            let is_patch = match patch_id {
-                PatchId::Patch(id) => {
-                    builder.with_patch_id(*id as u8);
-                    true
-                }
-                _ => false,
-            };
+            builder.with_patch_id(patch_id);
+
+            if package.has_legacy_references() {
+                builder.use_legacy_references();
+            }
 
             builder
                 .build(
                     package.version(),
-                    output_path.join(&output_name).as_path(),
-                    is_patch,
-                    package.has_legacy_references(),
+                    output_path.join(&output_name).as_path()
                 )
                 .unwrap_or_else(|e| {
                     eprintln!("failed to build package '{}': {}", output_name, e);

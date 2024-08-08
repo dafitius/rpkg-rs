@@ -2,7 +2,6 @@ use md5::{Digest, Md5};
 use rpkg_rs::resource::package_builder::PackageBuilder;
 use rpkg_rs::resource::partition_manager::PartitionManager;
 use rpkg_rs::resource::resource_package::ResourcePackageSource;
-use rpkg_rs::resource::resource_partition::PatchId;
 use rpkg_rs::WoaVersion;
 use std::fs::File;
 use std::path::PathBuf;
@@ -134,20 +133,16 @@ fn test_game_rebuild(
             let mut builder = PackageBuilder::from_resource_package(&package)?;
 
             // Set the patch ID if it's a patch package.
-            let is_patch = match patch_id {
-                PatchId::Patch(id) => {
-                    builder.with_patch_id(*id as u8);
-                    true
-                }
-                _ => false,
-            };
+            builder.with_patch_id(patch_id);
+
+            if package.has_legacy_references() {
+                builder.use_legacy_references();
+            }
 
             // And now build it.
             builder.build(
                 package.version(),
                 output_path.join(&output_name).as_path(),
-                is_patch,
-                package.has_legacy_references(),
             )?;
 
             // After it's built, check if the generated file is the same as the original.

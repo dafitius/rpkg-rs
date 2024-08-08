@@ -253,8 +253,9 @@ impl ResourcePackage {
 
 #[binrw]
 #[brw(repr(u8))]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Default, Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ChunkType {
+    #[default]
     Standard,
     Addon,
 }

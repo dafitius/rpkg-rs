@@ -6,6 +6,7 @@ use rpkg_rs::resource::resource_package::{
 };
 use rpkg_rs::resource::runtime_resource_id::RuntimeResourceID;
 use std::str::FromStr;
+use rpkg_rs::resource::resource_partition::PatchId;
 
 fn test_package_with_resource(
     compression_level: Option<i32>,
@@ -67,7 +68,7 @@ fn test_package_with_resource(
     builder.with_resource(resource);
 
     if is_patch {
-        builder.with_patch_id(1);
+        builder.with_patch_id(&PatchId::Patch(1));
 
         // Add some unneeded resources.
         for rrid in &unneeded_resource_ids {
@@ -75,8 +76,12 @@ fn test_package_with_resource(
         }
     }
 
+    if legacy_references{
+        builder.use_legacy_references();
+    }
+
     // Build the package in memory.
-    let package_data = builder.build_in_memory(version, is_patch, legacy_references)?;
+    let package_data = builder.build_in_memory(version)?;
 
     // Now let's try to parse it again.
     let package = ResourcePackage::from_memory(package_data, is_patch)?;

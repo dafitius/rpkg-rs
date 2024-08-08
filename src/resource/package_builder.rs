@@ -342,10 +342,30 @@ impl PackageResourceBuilder {
 }
 
 /// A builder for creating a ResourcePackage.
+/// ```
+/// # use rpkg_rs::resource::package_builder::{PackageBuilderError, PackageResourceBuilder};
+/// # use rpkg_rs::resource::pdefs::{PartitionId, PartitionType};
+/// # use rpkg_rs::resource::resource_package::PackageVersion;
+/// # use rpkg_rs::resource::resource_partition::PatchId;
+/// # use rpkg_rs::resource::runtime_resource_id::RuntimeResourceID;
+/// # use rpkg_rs::resource::package_builder::PackageBuilder;
+/// # use std::error::Error;
+/// # use std::fs;
+/// # fn main() -> Result<(), Box<dyn Error>>{
+/// #   let temp_dir = tempfile::tempdir()?;
+/// #   let output_path = temp_dir.path();
+///
+///     let mut builder = PackageBuilder::new_with_patch_id(PartitionId::default(), PatchId::Base);
+///     builder.with_resource(PackageResourceBuilder::from_memory(RuntimeResourceID::default(), "TYPE", vec![0,1,2,3,4,5], None, false).unwrap());
+///     builder.build(PackageVersion::RPKGv2, output_path)?;
+///
+///     assert!(temp_dir.path().join("chunk0.rpkg").exists());
+/// #   Ok(())
+/// # }
 pub struct PackageBuilder {
-    chunk_id: u8,
-    chunk_type: ChunkType,
-    patch_id: u8,
+    partition_id: PartitionId,
+    patch_id: PatchId,
+    use_legacy_references: bool,
     resources: IndexMap<RuntimeResourceID, PackageResourceBuilder>,
     unneeded_resources: IndexSet<RuntimeResourceID>,
 }
@@ -424,13 +444,19 @@ impl PackageBuilder {
     /// Creates a new package builder.
     ///
     /// # Arguments
-    /// * `chunk_id` - The chunk ID of the package.
+    /// * `chunk_id` - The chunk ID of the package. e.g. chunk0
     /// * `chunk_type` - The chunk type of the package.
     pub fn new(chunk_id: u8, chunk_type: ChunkType) -> Self {
         Self {
-            chunk_id,
-            chunk_type,
-            patch_id: 0,
+            partition_id: PartitionId {
+                part_type: match chunk_type {
+                    ChunkType::Standard => { PartitionType::Standard }
+                    ChunkType::Addon => { PartitionType::Addon }
+                },
+                index: chunk_id as usize,
+            },
+            use_legacy_references: false,
+            patch_id: PatchId::Base,
             resources: IndexMap::new(),
             unneeded_resources: IndexSet::new(),
         }
@@ -444,30 +470,14 @@ impl PackageBuilder {
     pub fn new_with_patch_id(
         partition_id: PartitionId,
         patch_id: PatchId,
-    ) -> Result<Self, PackageBuilderError> {
-        if partition_id.index() >= u8::MAX as usize {
-            return Err(PackageBuilderError::InvalidPartitionIdIndex);
-        }
-
-        Ok(Self {
-            chunk_id: partition_id.index() as u8,
-            chunk_type: match partition_id.part_type() {
-                PartitionType::Addon => ChunkType::Addon,
-                _ => ChunkType::Standard,
-            },
-            patch_id: match patch_id {
-                PatchId::Base => 0,
-                PatchId::Patch(id) => {
-                    if id > u8::MAX as usize {
-                        return Err(PackageBuilderError::InvalidPatchId);
-                    }
-
-                    id as u8
-                }
-            },
+    ) -> Self {
+        Self {
+            partition_id,
+            patch_id,
+            use_legacy_references: false,
             resources: IndexMap::new(),
             unneeded_resources: IndexSet::new(),
-        })
+        }
     }
 
     /// Creates a new package builder by duplicating an existing ResourcePackage.
@@ -483,21 +493,30 @@ impl PackageBuilder {
             .ok_or(PackageBuilderError::NoSource)?;
 
         let mut package = Self {
-            chunk_id: resource_package
-                .metadata
-                .as_ref()
-                .map(|m| m.chunk_id)
-                .unwrap_or(0),
-            chunk_type: resource_package
-                .metadata
-                .as_ref()
-                .map(|m| m.chunk_type)
-                .unwrap_or(ChunkType::Standard),
-            patch_id: resource_package
+            partition_id: PartitionId {
+                part_type: match resource_package
+                    .metadata
+                    .as_ref()
+                    .map(|m| m.chunk_type)
+                    .unwrap_or_default() {
+                    ChunkType::Standard => { PartitionType::Standard }
+                    ChunkType::Addon => { PartitionType::Addon }
+                },
+                index: resource_package
+                    .metadata
+                    .as_ref()
+                    .map(|m| m.chunk_id)
+                    .unwrap_or_default() as usize,
+            },
+            patch_id: match resource_package
                 .metadata
                 .as_ref()
                 .map(|m| m.patch_id)
-                .unwrap_or(0),
+                .unwrap_or_default() {
+                0 => PatchId::Base,
+                x => PatchId::Patch(x as usize)
+            },
+            use_legacy_references: false,
             resources: IndexMap::new(),
             unneeded_resources: IndexSet::new(),
         };
@@ -514,7 +533,7 @@ impl PackageBuilder {
                         resource.compressed_size(),
                         resource.is_scrambled(),
                     )
-                    .map_err(|e| PackageBuilderError::CannotDuplicateResource(*rrid, e))?
+                        .map_err(|e| PackageBuilderError::CannotDuplicateResource(*rrid, e))?
                 }
 
                 ResourcePackageSource::Memory(source_data) => {
@@ -538,7 +557,7 @@ impl PackageBuilder {
                         decompressed_size,
                         resource.is_scrambled(),
                     )
-                    .map_err(|e| PackageBuilderError::CannotDuplicateResource(*rrid, e))?
+                        .map_err(|e| PackageBuilderError::CannotDuplicateResource(*rrid, e))?
                 }
             };
 
@@ -561,9 +580,21 @@ impl PackageBuilder {
         Ok(package)
     }
 
+    /// Sets the partition ID of the package.
+    pub fn with_partition_id(&mut self, partition_id: &PartitionId) -> &mut Self {
+        self.partition_id = partition_id.clone();
+        self
+    }
+
     /// Sets the patch ID of the package.
-    pub fn with_patch_id(&mut self, patch_id: u8) -> &mut Self {
-        self.patch_id = patch_id;
+    pub fn with_patch_id(&mut self, patch_id: &PatchId) -> &mut Self {
+        self.patch_id = *patch_id;
+        self
+    }
+
+    /// When this flag is set it will build the reference flags with the legacy format
+    pub fn use_legacy_references(&mut self) -> &mut Self {
+        self.use_legacy_references = true;
         self
     }
 
@@ -594,7 +625,7 @@ impl PackageBuilder {
         data: &T,
     ) -> Result<(), PackageBuilderError>
     where
-        for<'a> T::Args<'a>: Required,
+            for<'a> T::Args<'a>: Required,
     {
         let current_offset = writer
             .stream_position()
@@ -763,16 +794,10 @@ impl PackageBuilder {
         &self,
         version: PackageVersion,
         writer: &mut W,
-        is_patch: bool,
-        legacy_references: bool,
     ) -> Result<(), PackageBuilderError> {
         // Perform some basic validation.
-        if !self.unneeded_resources.is_empty() && !is_patch {
+        if !self.unneeded_resources.is_empty() && self.patch_id.is_base() {
             return Err(PackageBuilderError::UnneededResourcesNotSupported);
-        }
-
-        if is_patch && self.patch_id == 0 {
-            return Err(PackageBuilderError::NoPatchId);
         }
 
         // First create a base header. We'll fill it and patch it later.
@@ -786,9 +811,15 @@ impl PackageBuilder {
                 PackageVersion::RPKGv1 => None,
                 PackageVersion::RPKGv2 => Some(PackageMetadata {
                     unknown: 1,
-                    chunk_id: self.chunk_id,
-                    chunk_type: self.chunk_type,
-                    patch_id: self.patch_id,
+                    chunk_id: self.partition_id.index as u8,
+                    chunk_type: match self.partition_id.part_type {
+                        PartitionType::Addon => { ChunkType::Addon }
+                        _ => { ChunkType::Standard }
+                    },
+                    patch_id: match self.patch_id {
+                        PatchId::Base => { 0 }
+                        PatchId::Patch(x) => { x as u8 }
+                    },
                     language_tag: *b"xx",
                 }),
             },
@@ -804,11 +835,11 @@ impl PackageBuilder {
 
         // Write the header and the tables.
         header
-            .write_args(writer, (is_patch,))
+            .write_args(writer, (self.patch_id.is_patch(),))
             .map_err(PackageBuilderError::SerializationError)?;
 
         let offset_table_result = self.write_offset_table(writer)?;
-        let metadata_table_result = self.write_metadata_table(writer, legacy_references)?;
+        let metadata_table_result = self.write_metadata_table(writer, self.use_legacy_references)?;
 
         // Now that we're done writing the tables, let's patch the header.
         header.header.offset_table_size = offset_table_result.offset_table_size;
@@ -981,11 +1012,14 @@ impl PackageBuilder {
         self,
         version: PackageVersion,
         output_path: &Path,
-        is_patch: bool,
-        legacy_references: bool,
     ) -> Result<(), PackageBuilderError> {
-        let mut file = File::create(output_path).map_err(PackageBuilderError::IoError)?;
-        self.build_internal(version, &mut file, is_patch, legacy_references)
+        let output_file = match output_path.is_dir() {
+            true => { output_path.join(self.partition_id.to_filename(self.patch_id)) }
+            false => { output_path.to_path_buf() }
+        };
+
+        let mut file = File::create(output_file).map_err(PackageBuilderError::IoError)?;
+        self.build_internal(version, &mut file)
     }
 
     /// Builds the package for the given version and returns it as a byte vector.
@@ -997,11 +1031,9 @@ impl PackageBuilder {
     pub fn build_in_memory(
         self,
         version: PackageVersion,
-        is_patch: bool,
-        legacy_references: bool,
     ) -> Result<Vec<u8>, PackageBuilderError> {
         let mut writer = Cursor::new(vec![]);
-        self.build_internal(version, &mut writer, is_patch, legacy_references)?;
+        self.build_internal(version, &mut writer)?;
         Ok(writer.into_inner())
     }
 }

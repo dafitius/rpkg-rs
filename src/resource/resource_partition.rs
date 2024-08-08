@@ -46,6 +46,19 @@ pub enum PatchId {
     Patch(usize),
 }
 
+impl PatchId{
+    pub fn is_base(&self) -> bool{
+        match self{
+            PatchId::Base => {true}
+            PatchId::Patch(_) => {false}
+        }
+    }
+
+    pub fn is_patch(&self) -> bool {
+        !self.is_base()
+    }
+}
+
 impl Ord for PatchId {
     fn cmp(&self, other: &Self) -> Ordering {
         match (self, other) {

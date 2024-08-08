@@ -49,9 +49,10 @@ pub enum PartitionInfoError {
     IdError(#[from] PartitionIdError),
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Default)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum PartitionType {
+    #[default]
     Standard,
     Addon,
     Dlc,
@@ -59,19 +60,25 @@ pub enum PartitionType {
     LanguageDlc(String),
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Default, Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct PartitionId {
-    part_type: PartitionType,
-    index: usize,
+    pub part_type: PartitionType,
+    pub index: usize,
 }
 
 impl PartitionId {
-    pub fn part_type(&self) -> PartitionType {
-        self.part_type.clone()
-    }
-    pub fn index(&self) -> usize {
-        self.index
+    pub fn to_filename(&self, patch_index: PatchId) -> String {
+        match patch_index {
+            PatchId::Base => {
+                let base = self.to_string();
+                format!("{}.rpkg", base)
+            }
+            PatchId::Patch(patch_idx) => {
+                let base = self.to_string();
+                format!("{}patch{}.rpkg", base, patch_idx)
+            }
+        }
     }
 }
 
@@ -181,16 +188,7 @@ impl PartitionInfo {
     }
 
     pub fn filename(&self, patch_index: PatchId) -> String {
-        match patch_index {
-            PatchId::Base => {
-                let base = self.id.to_string();
-                format!("{}.rpkg", base)
-            }
-            PatchId::Patch(patch_idx) => {
-                let base = self.id.to_string();
-                format!("{}patch{}.rpkg", base, patch_idx)
-            }
-        }
+        self.id.to_filename(patch_index)
     }
 
     pub fn add_root(&mut self, resource_id: ResourceID) {
