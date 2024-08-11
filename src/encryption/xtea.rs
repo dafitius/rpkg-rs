@@ -1,19 +1,23 @@
 use crate::encryption::xtea::XteaError::InvalidInput;
 use extended_tea::XTEA;
 use std::io::Cursor;
+use byteorder::{LittleEndian, WriteBytesExt};
 use thiserror::Error;
 
 /// Errors that can occur during XTEA encryption or decryption.
 #[derive(Debug, Error)]
 pub enum XteaError {
     #[error("Text encoding error: {0}")]
-    TextEncodingError(#[from] std::string::FromUtf8Error),
+    TextEncodingError(std::string::FromUtf8Error),
 
     #[error("An error occurred while trying to decrypt the file: {:?}", _0)]
-    CipherError(#[from] std::io::Error),
+    CipherError(std::io::Error),
 
     #[error("Unexpected input: {:?}", _0)]
     InvalidInput(String),
+
+    #[error("Xtea encoding error: {0}")]
+    XteaEncodingError(std::io::Error)
 }
 
 /// Implementation of XTEA encryption and decryption methods.
@@ -49,7 +53,7 @@ impl Xtea {
         if !input_buffer.starts_with(&Self::DEFAULT_ENCRYPTED_HEADER) {
             return Err(InvalidInput("Header mismatch".to_string()));
         }
-
+        let checksum =&input_buffer[payload_start-4..payload_start];
         let input = &input_buffer[payload_start..];
 
         if input.len() % 8 != 0 {
@@ -64,14 +68,20 @@ impl Xtea {
         let mut input_reader = Cursor::new(input);
         let mut ouput_writer = Cursor::new(&mut out_buffer);
 
-        xtea.decipher_stream::<byteorder::LittleEndian, _, _>(&mut input_reader, &mut ouput_writer)
+        xtea.decipher_stream::<LittleEndian, _, _>(&mut input_reader, &mut ouput_writer)
             .map_err(XteaError::CipherError)?;
 
-        String::from_utf8(ouput_writer.get_mut().to_owned()).map_err(XteaError::TextEncodingError)
+        let output = String::from_utf8(ouput_writer.get_mut().to_owned()).map_err(XteaError::TextEncodingError)?;
+
+        let result_checksum = crc32fast::hash(output.trim_end_matches('\0').as_bytes()).to_le_bytes();
+        match result_checksum == checksum{
+            true => Ok(output),
+            false => Err(InvalidInput("CRC checksum mismatched!".to_string()))
+        }
     }
 
     /// Decrypts a string given its buffer and key.
-    pub fn decrypt_string(input_buffer: Vec<u8>, key: &[u32; 4]) -> Result<String, XteaError> {
+    pub fn decrypt_string(input_buffer: &[u8], key: &[u32; 4]) -> Result<String, XteaError> {
         let input = &input_buffer;
 
         if input.len() % 8 != 0 {
@@ -86,17 +96,60 @@ impl Xtea {
         let mut input_reader = Cursor::new(input);
         let mut ouput_writer = Cursor::new(&mut out_buffer);
 
-        xtea.decipher_stream::<byteorder::LittleEndian, _, _>(&mut input_reader, &mut ouput_writer)
+        xtea.decipher_stream::<LittleEndian, _, _>(&mut input_reader, &mut ouput_writer)
             .map_err(XteaError::CipherError)?;
 
         String::from_utf8(ouput_writer.get_mut().to_owned()).map_err(XteaError::TextEncodingError)
     }
 
-    // fn encrypt_text_file(input_string: String, key: &[u32; 4]) -> Result<Vec<u8>, XteaError>{
-    //     todo!()
-    // }
-    //
-    // fn encrypt_string(input_string: String, key: &[u32; 4]) {
-    //     todo!()
-    // }
+    pub fn encrypt_text_file(input_string: String) -> Result<Vec<u8>, XteaError>{
+
+        //get the input buffer and trim any trailing zeros
+        let mut input_buffer = input_string.trim_end_matches('\0').as_bytes().to_vec();
+        let checksum = crc32fast::hash(&input_buffer);
+
+        let padding = 8 - (input_buffer.len() % 8);
+        if padding < 8 {
+            input_buffer.extend(vec![0u8; padding]);
+        }
+        let mut out_buffer = vec![0u8; input_buffer.len()];
+        let xtea = XTEA::new(&Self::DEFAULT_KEY);
+
+        let mut input_reader = Cursor::new(&input_buffer);
+        let mut output_writer = Cursor::new(&mut out_buffer);
+
+        xtea.encipher_stream::<LittleEndian, _, _>(&mut input_reader, &mut output_writer)
+            .map_err(XteaError::CipherError)?;
+
+        let mut final_buffer = Vec::new();
+        final_buffer.extend_from_slice(&Self::DEFAULT_ENCRYPTED_HEADER);
+
+        final_buffer.write_u32::<LittleEndian>(checksum)
+            .map_err(XteaError::XteaEncodingError)?;
+
+        final_buffer.extend_from_slice(&out_buffer);
+
+        Ok(final_buffer)
+    }
+
+    pub fn encrypt_string(input_string: String, key: &[u32; 4]) -> Result<Vec<u8>, XteaError> {
+        let mut input_buffer = input_string.into_bytes();
+
+        // Pad the input buffer to make its length a multiple of 8 bytes
+        let padding = 8 - (input_buffer.len() % 8);
+        if padding < 8 {
+            input_buffer.extend(vec![0u8; padding]);
+        }
+
+        let mut out_buffer = vec![0u8; input_buffer.len()];
+        let xtea = XTEA::new(key);
+
+        let mut input_reader = Cursor::new(&input_buffer);
+        let mut output_writer = Cursor::new(&mut out_buffer);
+
+        xtea.encipher_stream::<LittleEndian, _, _>(&mut input_reader, &mut output_writer)
+            .map_err(XteaError::CipherError)?;
+
+        Ok(out_buffer)
+    }
 }
