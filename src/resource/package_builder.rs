@@ -21,7 +21,7 @@ use indexmap::{IndexMap, IndexSet};
 use lzzzz::{lz4, lz4_hc};
 use thiserror::Error;
 
-/// `PackageResourceBlob` is an enum representing various types of package resource stores, which can 
+/// `PackageResourceBlob` is an enum representing various types of package resource stores, which can
 /// include files, file sections, and memory buffers, optionally compressed or scrambled.
 enum PackageResourceBlob {
     File {
@@ -450,8 +450,8 @@ impl PackageBuilder {
         Self {
             partition_id: PartitionId {
                 part_type: match chunk_type {
-                    ChunkType::Standard => { PartitionType::Standard }
-                    ChunkType::Addon => { PartitionType::Addon }
+                    ChunkType::Standard => PartitionType::Standard,
+                    ChunkType::Addon => PartitionType::Addon,
                 },
                 index: chunk_id as usize,
             },
@@ -467,10 +467,7 @@ impl PackageBuilder {
     /// # Arguments
     /// * `partition_id` - The partition id of the package.
     /// * `patch_id` - The patch id of the package.
-    pub fn new_with_patch_id(
-        partition_id: PartitionId,
-        patch_id: PatchId,
-    ) -> Self {
+    pub fn new_with_patch_id(partition_id: PartitionId, patch_id: PatchId) -> Self {
         Self {
             partition_id,
             patch_id,
@@ -498,9 +495,10 @@ impl PackageBuilder {
                     .metadata
                     .as_ref()
                     .map(|m| m.chunk_type)
-                    .unwrap_or_default() {
-                    ChunkType::Standard => { PartitionType::Standard }
-                    ChunkType::Addon => { PartitionType::Addon }
+                    .unwrap_or_default()
+                {
+                    ChunkType::Standard => PartitionType::Standard,
+                    ChunkType::Addon => PartitionType::Addon,
                 },
                 index: resource_package
                     .metadata
@@ -512,9 +510,10 @@ impl PackageBuilder {
                 .metadata
                 .as_ref()
                 .map(|m| m.patch_id)
-                .unwrap_or_default() {
+                .unwrap_or_default()
+            {
                 0 => PatchId::Base,
-                x => PatchId::Patch(x as usize)
+                x => PatchId::Patch(x as usize),
             },
             use_legacy_references: false,
             resources: IndexMap::new(),
@@ -533,7 +532,7 @@ impl PackageBuilder {
                         resource.compressed_size(),
                         resource.is_scrambled(),
                     )
-                        .map_err(|e| PackageBuilderError::CannotDuplicateResource(*rrid, e))?
+                    .map_err(|e| PackageBuilderError::CannotDuplicateResource(*rrid, e))?
                 }
 
                 ResourcePackageSource::Memory(source_data) => {
@@ -557,7 +556,7 @@ impl PackageBuilder {
                         decompressed_size,
                         resource.is_scrambled(),
                     )
-                        .map_err(|e| PackageBuilderError::CannotDuplicateResource(*rrid, e))?
+                    .map_err(|e| PackageBuilderError::CannotDuplicateResource(*rrid, e))?
                 }
             };
 
@@ -625,7 +624,7 @@ impl PackageBuilder {
         data: &T,
     ) -> Result<(), PackageBuilderError>
     where
-            for<'a> T::Args<'a>: Required,
+        for<'a> T::Args<'a>: Required,
     {
         let current_offset = writer
             .stream_position()
@@ -813,12 +812,12 @@ impl PackageBuilder {
                     unknown: 1,
                     chunk_id: self.partition_id.index as u8,
                     chunk_type: match self.partition_id.part_type {
-                        PartitionType::Addon => { ChunkType::Addon }
-                        _ => { ChunkType::Standard }
+                        PartitionType::Addon => ChunkType::Addon,
+                        _ => ChunkType::Standard,
                     },
                     patch_id: match self.patch_id {
-                        PatchId::Base => { 0 }
-                        PatchId::Patch(x) => { x as u8 }
+                        PatchId::Base => 0,
+                        PatchId::Patch(x) => x as u8,
                     },
                     language_tag: *b"xx",
                 }),
@@ -839,7 +838,8 @@ impl PackageBuilder {
             .map_err(PackageBuilderError::SerializationError)?;
 
         let offset_table_result = self.write_offset_table(writer)?;
-        let metadata_table_result = self.write_metadata_table(writer, self.use_legacy_references)?;
+        let metadata_table_result =
+            self.write_metadata_table(writer, self.use_legacy_references)?;
 
         // Now that we're done writing the tables, let's patch the header.
         header.header.offset_table_size = offset_table_result.offset_table_size;
@@ -1014,8 +1014,8 @@ impl PackageBuilder {
         output_path: &Path,
     ) -> Result<(), PackageBuilderError> {
         let output_file = match output_path.is_dir() {
-            true => { output_path.join(self.partition_id.to_filename(self.patch_id)) }
-            false => { output_path.to_path_buf() }
+            true => output_path.join(self.partition_id.to_filename(self.patch_id)),
+            false => output_path.to_path_buf(),
         };
 
         let mut file = File::create(output_file).map_err(PackageBuilderError::IoError)?;
@@ -1028,10 +1028,7 @@ impl PackageBuilder {
     /// * `version` - The version of the package to build.
     /// * `is_patch` - Whether the package is a patch package.
     /// * `legacy_references` - Whether to use the legacy references format.
-    pub fn build_in_memory(
-        self,
-        version: PackageVersion,
-    ) -> Result<Vec<u8>, PackageBuilderError> {
+    pub fn build_in_memory(self, version: PackageVersion) -> Result<Vec<u8>, PackageBuilderError> {
         let mut writer = Cursor::new(vec![]);
         self.build_internal(version, &mut writer)?;
         Ok(writer.into_inner())

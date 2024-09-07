@@ -10,11 +10,11 @@ use thiserror::Error;
 use crate::encryption::xtea::XteaError;
 use crate::misc::ini_file_system::{IniFileError, IniFileSystem};
 use crate::misc::resource_id::ResourceID;
+use crate::resource::pdefs::GameDiscoveryError::InvalidRuntimePath;
 use crate::resource::pdefs::PackageDefinitionSource::{HM2, HM2016, HM3};
 use crate::resource::pdefs::PartitionType::{Dlc, LanguageDlc, LanguageStandard, Standard};
 use crate::resource::resource_partition::PatchId;
 use crate::{utils, WoaVersion};
-use crate::resource::pdefs::GameDiscoveryError::InvalidRuntimePath;
 
 pub mod h2016_parser;
 pub mod hm2_parser;
@@ -192,34 +192,40 @@ impl PartitionInfo {
         self.id.to_filename(patch_index)
     }
 
-    #[deprecated(since="1.1.0", note="you can push to the roots field directly")]
+    #[deprecated(since = "1.1.0", note = "you can push to the roots field directly")]
     pub fn add_root(&mut self, resource_id: ResourceID) {
         self.roots.push(resource_id);
     }
-    #[deprecated(since="1.1.0", note="prefer direct access through the roots field")]
+    #[deprecated(since = "1.1.0", note = "prefer direct access through the roots field")]
     pub fn roots(&self) -> &Vec<ResourceID> {
         &self.roots
     }
 
-    #[deprecated(since="1.1.0", note="prefer direct access through the name field")]
+    #[deprecated(since = "1.1.0", note = "prefer direct access through the name field")]
     pub fn name(&self) -> &Option<String> {
         &self.name
     }
-    
-    #[deprecated(since="1.1.0", note="prefer direct access through the parent field")]
+
+    #[deprecated(
+        since = "1.1.0",
+        note = "prefer direct access through the parent field"
+    )]
     pub fn parent(&self) -> &Option<PartitionId> {
         &self.parent
     }
 
-    #[deprecated(since="1.1.0", note="prefer direct access through the id field")]
+    #[deprecated(since = "1.1.0", note = "prefer direct access through the id field")]
     pub fn id(&self) -> PartitionId {
         self.id.clone()
     }
-    #[deprecated(since="1.1.0", note="prefer direct access through the patch_level field")]
+    #[deprecated(
+        since = "1.1.0",
+        note = "prefer direct access through the patch_level field"
+    )]
     pub fn max_patch_level(&self) -> usize {
         self.patch_level
     }
-    
+
     pub fn set_max_patch_level(&mut self, patch_level: usize) {
         self.patch_level = patch_level
     }
@@ -293,7 +299,7 @@ pub enum GameDiscoveryError {
 
     #[error("No PROJECT_PATH found in thumbs.dat")]
     NoProjectPath,
-    
+
     #[error("The Runtime path cannot be found")]
     InvalidRuntimePath,
 
@@ -325,11 +331,15 @@ impl GamePaths {
         let mut runtime_path = retail_directory
             .join(project_path.replace("\\", "/"))
             .join(relative_runtime_path);
-        if !runtime_path.exists(){
-            runtime_path = retail_directory.join(project_path.replace("\\", "/")).join(utils::uppercase_first_letter(relative_runtime_path));
+        if !runtime_path.exists() {
+            runtime_path = retail_directory
+                .join(project_path.replace("\\", "/"))
+                .join(utils::uppercase_first_letter(relative_runtime_path));
         }
-        
-        runtime_path = runtime_path.canonicalize().map_err(|_| InvalidRuntimePath)?;
+
+        runtime_path = runtime_path
+            .canonicalize()
+            .map_err(|_| InvalidRuntimePath)?;
         let package_definition_path = runtime_path.join("packagedefinition.txt");
 
         Ok(Self {

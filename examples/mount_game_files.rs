@@ -1,8 +1,8 @@
+use itertools::Itertools;
 use std::io::{stdin, Write};
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::{env, io};
-use itertools::Itertools;
 
 use rpkg_rs::misc::resource_id::ResourceID;
 use rpkg_rs::resource::partition_manager::{PartitionManager, PartitionState};
@@ -64,18 +64,18 @@ fn main() {
             },
         );
 
-        //read the packagedefs here
-        let mut last_index = 0;
-        let mut progress = 0.0;
-        let progress_callback = |current, state: &PartitionState| {
-            if current != last_index {
-                last_index = current;
-                print!("Mounting partition {} ", current);
-            }
-            if !state.installing && !state.mounted {
-                println!("[Failed to mount this partition. Is it installed?]");
-            }
-            let install_progress = (state.install_progress * 10.0).ceil() / 10.0;
+    //read the packagedefs here
+    let mut last_index = 0;
+    let mut progress = 0.0;
+    let progress_callback = |current, state: &PartitionState| {
+        if current != last_index {
+            last_index = current;
+            print!("Mounting partition {} ", current);
+        }
+        if !state.installing && !state.mounted {
+            println!("[Failed to mount this partition. Is it installed?]");
+        }
+        let install_progress = (state.install_progress * 10.0).ceil() / 10.0;
 
         let chars_to_add = (install_progress * 10.0 - progress * 10.0) as usize * 2;
         let chars_to_add = std::cmp::min(chars_to_add, 20);
@@ -124,8 +124,7 @@ fn main() {
         for partition in &package_manager.partitions {
             let mut last_occurence: Option<&ResourceInfo> = None;
 
-            let size =
-                |info: &ResourceInfo| info.compressed_size().unwrap_or(info.size());
+            let size = |info: &ResourceInfo| info.compressed_size().unwrap_or(info.size());
 
             let changes = partition.resource_patch_indices(&rrid);
             let deletions = partition.resource_removal_indices(&rrid);

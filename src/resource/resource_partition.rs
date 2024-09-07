@@ -46,11 +46,11 @@ pub enum PatchId {
     Patch(usize),
 }
 
-impl PatchId{
-    pub fn is_base(&self) -> bool{
-        match self{
-            PatchId::Base => {true}
-            PatchId::Patch(_) => {false}
+impl PatchId {
+    pub fn is_base(&self) -> bool {
+        match self {
+            PatchId::Base => true,
+            PatchId::Patch(_) => false,
         }
     }
 
@@ -134,14 +134,13 @@ impl ResourcePartition {
     ) -> Result<(), ResourcePartitionError> {
         self.mount_resource_packages_in_partition_with_callback(runtime_path, |_| {})
     }
-    
+
     /// Mounts resource packages in the partition with a callback.
     ///
     /// This function attempts to mount all necessary resource packages into the current partition.
     /// If successful, the resources will be available for use within the partition.
     /// This function will fail silently when this package can't be found inside runtime directory.
     pub fn mount_resource_packages_in_partition_with_callback<F>(
-
         &mut self,
         runtime_path: &Path,
         mut progress_callback: F,

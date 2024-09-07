@@ -1,6 +1,7 @@
 use crate::resource::resource_info::ResourceInfo;
 use crate::resource::resource_package::ReferenceType::{INSTALL, NORMAL, WEAK};
 use binrw::{binrw, parser, BinRead, BinReaderExt, BinResult};
+use bitfield_struct::bitfield;
 use indexmap::IndexMap;
 use itertools::Itertools;
 use lzzzz::lz4;
@@ -10,7 +11,6 @@ use std::io::{Cursor, Read, Seek};
 use std::iter::zip;
 use std::path::{Path, PathBuf};
 use std::{fmt, io};
-use bitfield_struct::bitfield;
 use thiserror::Error;
 
 use crate::resource::runtime_resource_id::RuntimeResourceID;
@@ -375,7 +375,6 @@ impl ReferenceType {
     }
 }
 
-
 /// Reference flags for a given resource, defines the metadata of a reference
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum ResourceReferenceFlags {
@@ -408,7 +407,6 @@ impl From<ResourceReferenceFlags> for ResourceReferenceFlagsStandard {
 }
 
 impl ResourceReferenceFlags {
-    
     /// ```
     /// # use rpkg_rs::resource::resource_package::*;
     /// # fn main(){
@@ -421,7 +419,7 @@ impl ResourceReferenceFlags {
     pub fn to_legacy(&self) -> ResourceReferenceFlagsLegacy {
         (*self).into()
     }
-    
+
     /// ```
     /// # use rpkg_rs::resource::resource_package::*;
     /// # fn main(){
@@ -434,11 +432,11 @@ impl ResourceReferenceFlags {
     pub fn to_standard(&self) -> ResourceReferenceFlagsStandard {
         (*self).into()
     }
-    
+
     pub fn as_byte(&self) -> u8 {
-        match self{
-            ResourceReferenceFlags::Legacy(x) => {x.into_bits()}
-            ResourceReferenceFlags::Standard(x) => {x.into_bits()}
+        match self {
+            ResourceReferenceFlags::Legacy(x) => x.into_bits(),
+            ResourceReferenceFlags::Standard(x) => x.into_bits(),
         }
     }
 }
@@ -546,7 +544,6 @@ fn empty_writer<T>(_: &T) -> BinResult<()> {
     Ok(())
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -555,8 +552,14 @@ mod tests {
         let flag_v1 = ResourceReferenceFlagsLegacy::from_bits(0x80);
         let flag_v2 = ResourceReferenceFlagsStandard::from_bits(0x1F);
 
-        assert_eq!(flag_v1, ResourceReferenceFlags::Standard(flag_v2).to_legacy());
-        assert_eq!(flag_v2, ResourceReferenceFlags::Legacy(flag_v1).to_standard());
+        assert_eq!(
+            flag_v1,
+            ResourceReferenceFlags::Standard(flag_v2).to_legacy()
+        );
+        assert_eq!(
+            flag_v2,
+            ResourceReferenceFlags::Legacy(flag_v1).to_standard()
+        );
     }
 
     #[test]
@@ -564,7 +567,13 @@ mod tests {
         let flag_v1 = ResourceReferenceFlagsLegacy::from_bits(0x00);
         let flag_v2 = ResourceReferenceFlagsStandard::from_bits(0x5F);
 
-        assert_eq!(flag_v1, ResourceReferenceFlags::Standard(flag_v2).to_legacy());
-        assert_eq!(flag_v2, ResourceReferenceFlags::Legacy(flag_v1).to_standard());
+        assert_eq!(
+            flag_v1,
+            ResourceReferenceFlags::Standard(flag_v2).to_legacy()
+        );
+        assert_eq!(
+            flag_v2,
+            ResourceReferenceFlags::Legacy(flag_v1).to_standard()
+        );
     }
 }

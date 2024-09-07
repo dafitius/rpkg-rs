@@ -279,12 +279,18 @@ impl PartitionManager {
         }
     }
 
-    #[deprecated(since="1.0.0", note="prefer direct access through the partitions field")]
-    pub fn partitions(&self) -> &Vec<ResourcePartition>{
+    #[deprecated(
+        since = "1.0.0",
+        note = "prefer direct access through the partitions field"
+    )]
+    pub fn partitions(&self) -> &Vec<ResourcePartition> {
         &self.partitions
     }
 
-    #[deprecated(since="1.1.0", note="please implement this yourself, it is out of scope for this struct")]
+    #[deprecated(
+        since = "1.1.0",
+        note = "please implement this yourself, it is out of scope for this struct"
+    )]
     pub fn print_resource_changelog(&self, rrid: &RuntimeResourceID) {
         println!("Resource: {rrid}");
 
