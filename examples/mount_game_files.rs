@@ -2,10 +2,13 @@ use std::io::{stdin, Write};
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::{env, io};
+use itertools::Itertools;
 
 use rpkg_rs::misc::resource_id::ResourceID;
 use rpkg_rs::resource::partition_manager::{PartitionManager, PartitionState};
 use rpkg_rs::resource::pdefs::{GamePaths, PackageDefinitionSource};
+use rpkg_rs::resource::resource_info::ResourceInfo;
+use rpkg_rs::resource::resource_partition::PatchId;
 use rpkg_rs::resource::runtime_resource_id::RuntimeResourceID;
 use rpkg_rs::WoaVersion;
 
@@ -116,6 +119,56 @@ fn main() {
 
         let rrid = RuntimeResourceID::from_resource_id(&rid);
         println!("Try to find {}", rrid);
-        package_manager.print_resource_changelog(&rrid)
+        println!("Resource: {rrid}");
+
+        for partition in &package_manager.partitions {
+            let mut last_occurence: Option<&ResourceInfo> = None;
+
+            let size =
+                |info: &ResourceInfo| info.compressed_size().unwrap_or(info.size());
+
+            let changes = partition.resource_patch_indices(&rrid);
+            let deletions = partition.resource_removal_indices(&rrid);
+            let occurrences = changes
+                .clone()
+                .into_iter()
+                .chain(deletions.clone().into_iter())
+                .collect::<Vec<PatchId>>();
+
+            for occurence in occurrences.iter().sorted() {
+                println!(
+                    "{}: {}",
+                    match occurence {
+                        PatchId::Base => {
+                            "Base"
+                        }
+                        PatchId::Patch(_) => {
+                            "Patch"
+                        }
+                    },
+                    partition.partition_info().filename(*occurence)
+                );
+
+                if deletions.contains(occurence) {
+                    println!("\t- Removal: resource deleted");
+                    last_occurence = None;
+                }
+
+                if changes.contains(occurence) {
+                    if let Ok(info) = partition.resource_info_from(&rrid, *occurence) {
+                        if let Some(last_info) = last_occurence {
+                            println!(
+                                "\t- Modification: Size changed from {} to {}",
+                                size(last_info),
+                                size(info)
+                            );
+                        } else {
+                            println!("\t- Addition: New occurrence, Size {} bytes", size(info))
+                        }
+                        last_occurence = Some(info);
+                    }
+                }
+            }
+        }
     }
 }

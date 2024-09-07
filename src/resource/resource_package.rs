@@ -167,8 +167,8 @@ impl ResourcePackage {
     pub fn has_legacy_references(&self) -> bool {
         self.resources.iter().any(|(_, resource)| {
             resource.references().iter().any(|(_, flags)| match flags {
-                ResourceReferenceFlags::V1(_) => true,
-                ResourceReferenceFlags::V2(_) => false,
+                ResourceReferenceFlags::Legacy(_) => true,
+                ResourceReferenceFlags::Standard(_) => false,
             })
         })
     }
@@ -331,7 +331,7 @@ pub struct ResourceHeader {
 #[binrw]
 #[bw(map = |&x| Self::into_bits(x))]
 #[derive(Eq, PartialEq)]
-pub struct ResourceReferenceFlagsV1 {
+pub struct ResourceReferenceFlagsLegacy {
     pub __: bool,
     pub runtime_acquired: bool,
     pub weak_reference: bool,
@@ -346,7 +346,7 @@ pub struct ResourceReferenceFlagsV1 {
 #[binrw]
 #[derive(Eq, PartialEq)]
 #[bw(map = |&x: &Self| x.into_bits())]
-pub struct ResourceReferenceFlagsV2 {
+pub struct ResourceReferenceFlagsStandard {
     #[bits(5, default = 0x1F)]
     pub language_code: u8,
     pub runtime_acquired: bool,
@@ -379,15 +379,15 @@ impl ReferenceType {
 /// Reference flags for a given resource, defines the metadata of a reference
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum ResourceReferenceFlags {
-    V1(ResourceReferenceFlagsV1),
-    V2(ResourceReferenceFlagsV2),
+    Legacy(ResourceReferenceFlagsLegacy),
+    Standard(ResourceReferenceFlagsStandard),
 }
 
-impl From<ResourceReferenceFlags> for ResourceReferenceFlagsV1{
+impl From<ResourceReferenceFlags> for ResourceReferenceFlagsLegacy {
     fn from(value: ResourceReferenceFlags) -> Self {
         match value {
-            ResourceReferenceFlags::V1(b) => b,
-            ResourceReferenceFlags::V2(b) => ResourceReferenceFlagsV1::new()
+            ResourceReferenceFlags::Legacy(b) => b,
+            ResourceReferenceFlags::Standard(b) => ResourceReferenceFlagsLegacy::new()
                 .with_runtime_acquired(b.runtime_acquired())
                 .with_weak_reference(b.reference_type() == WEAK)
                 .with_install_dependency(b.reference_type() == INSTALL),
@@ -395,11 +395,11 @@ impl From<ResourceReferenceFlags> for ResourceReferenceFlagsV1{
     }
 }
 
-impl From<ResourceReferenceFlags> for ResourceReferenceFlagsV2{
+impl From<ResourceReferenceFlags> for ResourceReferenceFlagsStandard {
     fn from(value: ResourceReferenceFlags) -> Self {
         match value {
-            ResourceReferenceFlags::V2(b) => b,
-            ResourceReferenceFlags::V1(b) => ResourceReferenceFlagsV2::new()
+            ResourceReferenceFlags::Standard(b) => b,
+            ResourceReferenceFlags::Legacy(b) => ResourceReferenceFlagsStandard::new()
                 .with_language_code(0x1F)
                 .with_runtime_acquired(b.runtime_acquired())
                 .with_reference_type(value.reference_type()),
@@ -412,53 +412,60 @@ impl ResourceReferenceFlags {
     /// ```
     /// # use rpkg_rs::resource::resource_package::*;
     /// # fn main(){
-    ///     let flag_v1 = ResourceReferenceFlagsV1::new().with_install_dependency(true).with_runtime_acquired(true);
-    ///     let flag_v2 = ResourceReferenceFlagsV2::new().with_reference_type(ReferenceType::INSTALL).with_runtime_acquired(true);
+    ///     let flag_v1 = ResourceReferenceFlagsLegacy::new().with_install_dependency(true).with_runtime_acquired(true);
+    ///     let flag_v2 = ResourceReferenceFlagsStandard::new().with_reference_type(ReferenceType::INSTALL).with_runtime_acquired(true);
     ///
-    ///     assert_eq!(flag_v1, ResourceReferenceFlags::V2(flag_v2).to_v1());
+    ///     assert_eq!(flag_v1, ResourceReferenceFlags::Standard(flag_v2).to_legacy());
     /// # }
     /// ```
-    pub fn to_v1(&self) -> ResourceReferenceFlagsV1 {
+    pub fn to_legacy(&self) -> ResourceReferenceFlagsLegacy {
         (*self).into()
     }
     
     /// ```
     /// # use rpkg_rs::resource::resource_package::*;
     /// # fn main(){
-    ///     let flag_v1 = ResourceReferenceFlagsV1::new().with_install_dependency(true).with_runtime_acquired(true);
-    ///     let flag_v2 = ResourceReferenceFlagsV2::new().with_reference_type(ReferenceType::INSTALL).with_runtime_acquired(true).with_language_code(0x1F);
+    ///     let flag_v1 = ResourceReferenceFlagsLegacy::new().with_install_dependency(true).with_runtime_acquired(true);
+    ///     let flag_v2 = ResourceReferenceFlagsStandard::new().with_reference_type(ReferenceType::INSTALL).with_runtime_acquired(true).with_language_code(0x1F);
     ///
-    ///     assert_eq!(flag_v2, ResourceReferenceFlags::V1(flag_v1).to_v2());
+    ///     assert_eq!(flag_v2, ResourceReferenceFlags::Legacy(flag_v1).to_standard());
     /// # }
     /// ```
-    pub fn to_v2(&self) -> ResourceReferenceFlagsV2 {
+    pub fn to_standard(&self) -> ResourceReferenceFlagsStandard {
         (*self).into()
+    }
+    
+    pub fn as_byte(&self) -> u8 {
+        match self{
+            ResourceReferenceFlags::Legacy(x) => {x.into_bits()}
+            ResourceReferenceFlags::Standard(x) => {x.into_bits()}
+        }
     }
 }
 
 impl ResourceReferenceFlags {
     pub fn language_code(&self) -> u8 {
         match self {
-            ResourceReferenceFlags::V1(_) => 0x1F,
-            ResourceReferenceFlags::V2(b) => b.language_code(),
+            ResourceReferenceFlags::Legacy(_) => 0x1F,
+            ResourceReferenceFlags::Standard(b) => b.language_code(),
         }
     }
 
     pub fn is_acquired(&self) -> bool {
         match self {
-            ResourceReferenceFlags::V1(b) => b.runtime_acquired(),
-            ResourceReferenceFlags::V2(b) => b.runtime_acquired(),
+            ResourceReferenceFlags::Legacy(b) => b.runtime_acquired(),
+            ResourceReferenceFlags::Standard(b) => b.runtime_acquired(),
         }
     }
 
     pub fn reference_type(&self) -> ReferenceType {
         match self {
-            ResourceReferenceFlags::V1(b) => match b.install_dependency() {
+            ResourceReferenceFlags::Legacy(b) => match b.install_dependency() {
                 true => INSTALL,
                 false if b.weak_reference() => WEAK,
                 false => NORMAL,
             },
-            ResourceReferenceFlags::V2(b) => b.reference_type(),
+            ResourceReferenceFlags::Standard(b) => b.reference_type(),
         }
     }
 }
@@ -482,8 +489,8 @@ fn read_references() -> BinResult<Vec<(RuntimeResourceID, ResourceReferenceFlags
 
     let arrays = if is_new_format {
         let flags: Vec<ResourceReferenceFlags> = (0..reference_count)
-            .map(|_| reader.read_le::<ResourceReferenceFlagsV2>())
-            .map_ok(ResourceReferenceFlags::V2)
+            .map(|_| reader.read_le::<ResourceReferenceFlagsStandard>())
+            .map_ok(ResourceReferenceFlags::Standard)
             .collect::<BinResult<Vec<_>>>()?;
         let rrids: Vec<RuntimeResourceID> = (0..reference_count)
             .map(|_| u64::read_le(reader))
@@ -496,8 +503,8 @@ fn read_references() -> BinResult<Vec<(RuntimeResourceID, ResourceReferenceFlags
             .map_ok(RuntimeResourceID::from)
             .collect::<BinResult<Vec<_>>>()?;
         let flags: Vec<ResourceReferenceFlags> = (0..reference_count)
-            .map(|_| reader.read_le::<ResourceReferenceFlagsV1>())
-            .map_ok(ResourceReferenceFlags::V1)
+            .map(|_| reader.read_le::<ResourceReferenceFlagsLegacy>())
+            .map_ok(ResourceReferenceFlags::Legacy)
             .collect::<BinResult<Vec<_>>>()?;
         (rrids, flags)
     };
@@ -545,19 +552,19 @@ mod tests {
     use super::*;
     #[test]
     fn test_flag_conversion_801f() {
-        let flag_v1 = ResourceReferenceFlagsV1::from_bits(0x80);
-        let flag_v2 = ResourceReferenceFlagsV2::from_bits(0x1F);
+        let flag_v1 = ResourceReferenceFlagsLegacy::from_bits(0x80);
+        let flag_v2 = ResourceReferenceFlagsStandard::from_bits(0x1F);
 
-        assert_eq!(flag_v1, ResourceReferenceFlags::V2(flag_v2).to_v1());
-        assert_eq!(flag_v2, ResourceReferenceFlags::V1(flag_v1).to_v2());
+        assert_eq!(flag_v1, ResourceReferenceFlags::Standard(flag_v2).to_legacy());
+        assert_eq!(flag_v2, ResourceReferenceFlags::Legacy(flag_v1).to_standard());
     }
 
     #[test]
     fn test_flag_conversion_005f() {
-        let flag_v1 = ResourceReferenceFlagsV1::from_bits(0x00);
-        let flag_v2 = ResourceReferenceFlagsV2::from_bits(0x5F);
+        let flag_v1 = ResourceReferenceFlagsLegacy::from_bits(0x00);
+        let flag_v2 = ResourceReferenceFlagsStandard::from_bits(0x5F);
 
-        assert_eq!(flag_v1, ResourceReferenceFlags::V2(flag_v2).to_v1());
-        assert_eq!(flag_v2, ResourceReferenceFlags::V1(flag_v1).to_v2());
+        assert_eq!(flag_v1, ResourceReferenceFlags::Standard(flag_v2).to_legacy());
+        assert_eq!(flag_v2, ResourceReferenceFlags::Legacy(flag_v1).to_standard());
     }
 }

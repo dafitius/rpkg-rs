@@ -38,8 +38,8 @@ pub struct PartitionState {
 
 pub struct PartitionManager {
     runtime_directory: PathBuf,
-    partition_infos: Vec<PartitionInfo>,
-    pub partitions: Vec<ResourcePartition>,
+    partition_infos: Vec<PartitionInfo>, //All potential partitions which could be mounted with this manager
+    pub partitions: Vec<ResourcePartition>, //All mounted partitions
 }
 
 impl PartitionManager {
@@ -138,7 +138,7 @@ impl PartitionManager {
 
         partition
             .mount_resource_packages_in_partition_with_callback(runtime_directory, callback)
-            .map_err(|e| PackageManagerError::PartitionError(partition_info.id(), e))?;
+            .map_err(|e| PackageManagerError::PartitionError(partition_info.id, e))?;
 
         if state_result.mounted {
             Ok(Some(partition))
@@ -211,7 +211,7 @@ impl PartitionManager {
         let partition = self
             .partitions
             .iter()
-            .find(|partition| partition.partition_info().id() == partition_id);
+            .find(|partition| partition.partition_info().id == partition_id);
 
         if let Some(partition) = partition {
             match partition.read_resource(&rrid) {
@@ -228,7 +228,7 @@ impl PartitionManager {
     pub fn find_partition(&self, partition_id: PartitionId) -> Option<&ResourcePartition> {
         self.partitions
             .iter()
-            .find(|partition| partition.partition_info().id() == partition_id)
+            .find(|partition| partition.partition_info().id == partition_id)
     }
 
     pub fn partitions_with_resource(&self, rrid: &RuntimeResourceID) -> Vec<PartitionId> {
@@ -236,7 +236,7 @@ impl PartitionManager {
             .iter()
             .filter_map(|partition| {
                 if partition.contains(rrid) {
-                    Some(partition.partition_info().id())
+                    Some(partition.partition_info().id.clone())
                 } else {
                     None
                 }
@@ -265,7 +265,7 @@ impl PartitionManager {
         let partition = self
             .partitions
             .iter()
-            .find(|partition| partition.partition_info().id() == *partition_id);
+            .find(|partition| partition.partition_info().id == *partition_id);
 
         if let Some(partition) = partition {
             match partition.get_resource_info(rrid) {
@@ -279,6 +279,12 @@ impl PartitionManager {
         }
     }
 
+    #[deprecated(since="1.0.0", note="prefer direct access through the partitions field")]
+    pub fn partitions(&self) -> &Vec<ResourcePartition>{
+        &self.partitions
+    }
+
+    #[deprecated(since="1.1.0", note="please implement this yourself, it is out of scope for this struct")]
     pub fn print_resource_changelog(&self, rrid: &RuntimeResourceID) {
         println!("Resource: {rrid}");
 

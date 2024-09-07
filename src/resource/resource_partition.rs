@@ -104,7 +104,7 @@ impl ResourcePartition {
             return Err(ResourcePartitionError::BasePackageNotFound(filename));
         }
 
-        let regex_str = format!(r"^(?:{}patch([0-9]+).rpkg)$", self.info.id());
+        let regex_str = format!(r"^(?:{}patch([0-9]+).rpkg)$", self.info.id);
         let patch_package_re = Regex::new(regex_str.as_str()).unwrap();
 
         for file_name in utils::read_file_names(package_dir)
@@ -113,7 +113,7 @@ impl ResourcePartition {
         {
             if let Some(cap) = patch_package_re.captures(file_name) {
                 let patch_level = cap[1].parse::<usize>()?;
-                if patch_level <= self.info.max_patch_level() {
+                if patch_level <= self.info.patch_level {
                     patch_indices.push(PatchId::Patch(patch_level));
                 }
             }
@@ -362,7 +362,7 @@ impl Debug for ResourcePartition {
             f,
             "{{index: {}, name: {}, edge_resources: {}, total_resources: {} }}",
             self.info.filename(PatchId::Base),
-            self.info.name().clone().unwrap_or_default(),
+            self.info.name.clone().unwrap_or_default(),
             self.resources.len(),
             total
         )?;

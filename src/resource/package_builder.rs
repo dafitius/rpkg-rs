@@ -741,14 +741,14 @@ impl PackageBuilder {
 
                     for (_, flags) in &resource.references {
                         flags
-                            .to_v1()
+                            .to_legacy()
                             .write(writer)
                             .map_err(PackageBuilderError::SerializationError)?;
                     }
                 } else {
                     for (_, flags) in &resource.references {
                         flags
-                            .to_v2()
+                            .to_standard()
                             .write(writer)
                             .map_err(PackageBuilderError::SerializationError)?;
                     }

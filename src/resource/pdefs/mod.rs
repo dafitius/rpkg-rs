@@ -13,7 +13,8 @@ use crate::misc::resource_id::ResourceID;
 use crate::resource::pdefs::PackageDefinitionSource::{HM2, HM2016, HM3};
 use crate::resource::pdefs::PartitionType::{Dlc, LanguageDlc, LanguageStandard, Standard};
 use crate::resource::resource_partition::PatchId;
-use crate::WoaVersion;
+use crate::{utils, WoaVersion};
+use crate::resource::pdefs::GameDiscoveryError::InvalidRuntimePath;
 
 pub mod h2016_parser;
 pub mod hm2_parser;
@@ -164,16 +165,16 @@ impl Display for PartitionId {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct PartitionInfo {
     /// The name of the partition, if available.
-    name: Option<String>,
+    pub name: Option<String>,
     /// The parent partition's identifier, if any.
-    parent: Option<PartitionId>,
+    pub parent: Option<PartitionId>,
     /// The identifier of the partition.
     /// Example: "chunk9", "dlc12" or "dlc5langjp"
-    id: PartitionId,
+    pub id: PartitionId,
     /// The patch level of the partition. Note: This is used an an upper bound, any patch above this level will be ignored.
-    patch_level: usize,
+    pub patch_level: usize,
     /// The list of resource IDs associated with this partition.
-    roots: Vec<ResourceID>,
+    pub roots: Vec<ResourceID>,
 }
 
 impl PartitionInfo {
@@ -191,26 +192,34 @@ impl PartitionInfo {
         self.id.to_filename(patch_index)
     }
 
+    #[deprecated(since="1.1.0", note="you can push to the roots field directly")]
     pub fn add_root(&mut self, resource_id: ResourceID) {
         self.roots.push(resource_id);
     }
+    #[deprecated(since="1.1.0", note="prefer direct access through the roots field")]
     pub fn roots(&self) -> &Vec<ResourceID> {
         &self.roots
     }
 
+    #[deprecated(since="1.1.0", note="prefer direct access through the name field")]
     pub fn name(&self) -> &Option<String> {
         &self.name
     }
+    
+    #[deprecated(since="1.1.0", note="prefer direct access through the parent field")]
     pub fn parent(&self) -> &Option<PartitionId> {
         &self.parent
     }
+
+    #[deprecated(since="1.1.0", note="prefer direct access through the id field")]
     pub fn id(&self) -> PartitionId {
         self.id.clone()
     }
+    #[deprecated(since="1.1.0", note="prefer direct access through the patch_level field")]
     pub fn max_patch_level(&self) -> usize {
         self.patch_level
     }
-
+    
     pub fn set_max_patch_level(&mut self, patch_level: usize) {
         self.patch_level = patch_level
     }
@@ -284,6 +293,9 @@ pub enum GameDiscoveryError {
 
     #[error("No PROJECT_PATH found in thumbs.dat")]
     NoProjectPath,
+    
+    #[error("The Runtime path cannot be found")]
+    InvalidRuntimePath,
 
     #[error("Failed to parse the thumbs.dat file: {0}")]
     FailedToParseThumbsFile(#[from] IniFileError),
@@ -310,9 +322,14 @@ impl GamePaths {
             .options()
             .get("RUNTIME_PATH")
             .ok_or(GameDiscoveryError::NoRuntimePath)?;
-        let runtime_path = retail_directory
-            .join(project_path)
+        let mut runtime_path = retail_directory
+            .join(project_path.replace("\\", "/"))
             .join(relative_runtime_path);
+        if !runtime_path.exists(){
+            runtime_path = retail_directory.join(project_path.replace("\\", "/")).join(utils::uppercase_first_letter(relative_runtime_path));
+        }
+        
+        runtime_path = runtime_path.canonicalize().map_err(|_| InvalidRuntimePath)?;
         let package_definition_path = runtime_path.join("packagedefinition.txt");
 
         Ok(Self {

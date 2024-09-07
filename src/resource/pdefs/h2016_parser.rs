@@ -90,7 +90,7 @@ impl PackageDefinitionParser for H2016Parser {
                             if let Ok(rid) =
                                 ResourceID::from_str(format!("{}.{}", &m[1], &m[2]).as_str())
                             {
-                                current_partition.add_root(rid);
+                                current_partition.roots.push(rid);
                             }
                         }
                     }

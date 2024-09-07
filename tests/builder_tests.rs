@@ -1,8 +1,8 @@
 use rpkg_rs::misc::resource_id::ResourceID;
 use rpkg_rs::resource::package_builder::{PackageBuilder, PackageResourceBuilder};
 use rpkg_rs::resource::resource_package::{
-    ChunkType, PackageVersion, ResourcePackage, ResourceReferenceFlags, ResourceReferenceFlagsV1,
-    ResourceReferenceFlagsV2,
+    ChunkType, PackageVersion, ResourcePackage, ResourceReferenceFlags, ResourceReferenceFlagsLegacy,
+    ResourceReferenceFlagsStandard,
 };
 use rpkg_rs::resource::runtime_resource_id::RuntimeResourceID;
 use std::str::FromStr;
@@ -36,13 +36,13 @@ fn test_package_with_resource(
     ];
 
     let resource_reference_flags = if legacy_references {
-        ResourceReferenceFlags::V1(
-            ResourceReferenceFlagsV1::new()
+        ResourceReferenceFlags::Legacy(
+            ResourceReferenceFlagsLegacy::new()
                 .with_runtime_acquired(true)
                 .with_install_dependency(true),
         )
     } else {
-        ResourceReferenceFlags::V2(ResourceReferenceFlagsV2::new().with_language_code(0x1F))
+        ResourceReferenceFlags::Standard(ResourceReferenceFlagsStandard::new().with_language_code(0x1F))
     };
 
     // Start building the package.

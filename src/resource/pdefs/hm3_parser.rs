@@ -50,7 +50,7 @@ impl PackageDefinitionParser for HM3Parser {
                         if let Ok(rid) =
                             ResourceID::from_str(format!("{}.{}", &m[1], &m[2]).as_str())
                         {
-                            current_partition.add_root(rid);
+                            current_partition.roots.push(rid);
                         }
                     } else {
                         return Err(PackageDefinitionError::UnexpectedFormat("ResourceID defined before partition, are you using the correct game version?".to_string()));

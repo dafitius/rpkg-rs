@@ -20,7 +20,7 @@ pub enum PathListError {
 /// A rainbow table of hashed paths with associated paths.
 #[derive(Default, Debug)]
 pub struct PathList {
-    entries: HashMap<RuntimeResourceID, Option<ResourceID>>,
+    pub entries: HashMap<RuntimeResourceID, Option<ResourceID>>,
 }
 
 impl PathList {
