@@ -15,18 +15,18 @@ status = "actively-developed"
 binrw = "0.14.0"
 bitfield-struct = "0.8.0"
 memmap2 = "0.9.4"
-lazy-regex = "3.1.0"
-lzzzz = "1.0.5"
+lazy-regex = "3.3.0"
+lzzzz = "1.1.0"
 pathdiff = "0.2.1"
 itertools = { version = "0.13.0", features = [] }
-thiserror = "1.0.61"
+thiserror = "1.0.63"
 md-5 = "0.10.6"
 extended-tea = "0.1.1"
 byteorder = "1.5.0"
 rayon = { version = "1.10.0", optional = true}
-serde = { version = "1.0.203", optional = true, features = ["derive"] }
+serde = { version = "1.0.210", optional = true, features = ["derive"] }
 serde-hex = { version = "0.1.0", optional = true }
-indexmap = "2.2.6"
+indexmap = "2.5.0"
 crc32fast = "1.4.2"
 
 [features]
@@ -35,7 +35,7 @@ path-list = ["dep:rayon"]
 serde = ["dep:serde", "dep:serde-hex"]
 
 [dev-dependencies]
-serde_json = "1.0.118"
+serde_json = "1.0.128"
 version-sync = "0.9.5"
-tempfile = "3.10.1"
+tempfile = "3.12.0"
 
