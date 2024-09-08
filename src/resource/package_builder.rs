@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::fs::File;
 use std::io;
-use std::io::{Read, Seek, Write};
+use std::io::{BufWriter, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 
 use crate::resource::pdefs::{PartitionId, PartitionType};
@@ -419,11 +419,11 @@ struct MetadataTableResult {
 }
 
 /// A writer that xors the data with a predefined key.
-struct XorWriter<'a, W: Write + Read + Seek> {
+struct XorWriter<'a, W: Write + Seek> {
     writer: &'a mut W,
 }
 
-impl<W: Write + Read + Seek> Write for XorWriter<'_, W> {
+impl<W: Write + Seek> Write for XorWriter<'_, W> {
     fn write(&mut self, buf: &[u8]) -> Result<usize, io::Error> {
         let str_xor = [0xdc, 0x45, 0xa6, 0x9c, 0xd3, 0x72, 0x4c, 0xab];
 
@@ -618,7 +618,7 @@ impl PackageBuilder {
     }
 
     /// Patches data at a given offset and returns to the previous position.
-    fn backpatch<W: Write + Read + Seek, T: BinWrite + WriteEndian>(
+    fn backpatch<W: Write + Seek, T: BinWrite + WriteEndian>(
         writer: &mut W,
         patch_offset: u64,
         data: &T,
@@ -641,7 +641,7 @@ impl PackageBuilder {
     }
 
     /// Writes the offset table to the given writer.
-    fn write_offset_table<W: Write + Read + Seek>(
+    fn write_offset_table<W: Write + Seek>(
         &self,
         writer: &mut W,
     ) -> Result<OffsetTableResult, PackageBuilderError> {
@@ -685,7 +685,7 @@ impl PackageBuilder {
     }
 
     /// Writes the metadata table to the given writer.
-    fn write_metadata_table<W: Write + Read + Seek>(
+    fn write_metadata_table<W: Write + Seek>(
         &self,
         writer: &mut W,
         legacy_references: bool,
@@ -789,7 +789,7 @@ impl PackageBuilder {
     }
 
     /// Builds the package, writing it to the given writer.
-    fn build_internal<W: Write + Read + Seek>(
+    fn build_internal<W: Write + Seek>(
         &self,
         version: PackageVersion,
         writer: &mut W,
@@ -1017,9 +1017,12 @@ impl PackageBuilder {
             true => output_path.join(self.partition_id.to_filename(self.patch_id)),
             false => output_path.to_path_buf(),
         };
-
-        let mut file = File::create(output_file).map_err(PackageBuilderError::IoError)?;
-        self.build_internal(version, &mut file)
+        
+        let file = File::create(output_file).map_err(PackageBuilderError::IoError)?;
+        let mut writer = BufWriter::new(file);
+        let result = self.build_internal(version, &mut writer);
+        writer.flush()?;
+        result
     }
 
     /// Builds the package for the given version and returns it as a byte vector.
@@ -1030,6 +1033,7 @@ impl PackageBuilder {
     /// * `legacy_references` - Whether to use the legacy references format.
     pub fn build_in_memory(self, version: PackageVersion) -> Result<Vec<u8>, PackageBuilderError> {
         let mut writer = Cursor::new(vec![]);
+        
         self.build_internal(version, &mut writer)?;
         Ok(writer.into_inner())
     }
