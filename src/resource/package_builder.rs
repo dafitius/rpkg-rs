@@ -1001,23 +1001,35 @@ impl PackageBuilder {
         Ok(())
     }
 
-    /// Builds the package for the given version and writes it to the given path.
-    ///
-    /// # Arguments
-    /// * `version` - The version of the package to build.
-    /// * `output_path` - The path to the output file.
-    /// * `is_patch` - Whether the package is a patch package.
-    /// * `legacy_references` - Whether to use the legacy references format.
+    #[deprecated(since = "1.1.1", note = "use `build_to_file` instead")]
     pub fn build(
         self,
         version: PackageVersion,
         output_path: &Path,
     ) -> Result<(), PackageBuilderError> {
+        self.build_to_file(version, output_path)
+    }
+
+    /// Builds the package for the given version and writes it to the given writer.
+    ///
+    /// # Arguments
+    /// * `version` - The version of the package to build.
+    /// * `writer` - The struct implementing the Write and Seek traits.
+    pub fn build_to_writer<W: Write + Seek>(self, version: PackageVersion, writer: &mut W) -> Result<(), PackageBuilderError>{
+        self.build_internal(version, writer)
+    }
+    
+    /// Builds the package for the given version and writes it to the given path.
+    ///
+    /// # Arguments
+    /// * `version` - The version of the package to build.
+    /// * `output_path` - The path to the output file.
+    pub fn build_to_file(self, version: PackageVersion, output_path: &Path) -> Result<(), PackageBuilderError> {
         let output_file = match output_path.is_dir() {
             true => output_path.join(self.partition_id.to_filename(self.patch_id)),
             false => output_path.to_path_buf(),
         };
-        
+
         let file = File::create(output_file).map_err(PackageBuilderError::IoError)?;
         let mut writer = BufWriter::new(file);
         let result = self.build_internal(version, &mut writer);
@@ -1025,15 +1037,18 @@ impl PackageBuilder {
         result
     }
 
+    #[deprecated(since = "1.1.1", note = "use `build_to_vec` instead")]
+    pub fn build_in_memory(self, version: PackageVersion) -> Result<Vec<u8>, PackageBuilderError> {
+        self.build_to_vec(version)
+    }
+
     /// Builds the package for the given version and returns it as a byte vector.
     ///
     /// # Arguments
     /// * `version` - The version of the package to build.
-    /// * `is_patch` - Whether the package is a patch package.
-    /// * `legacy_references` - Whether to use the legacy references format.
-    pub fn build_in_memory(self, version: PackageVersion) -> Result<Vec<u8>, PackageBuilderError> {
+    pub fn build_to_vec(self, version: PackageVersion) -> Result<Vec<u8>, PackageBuilderError> {
         let mut writer = Cursor::new(vec![]);
-        
+
         self.build_internal(version, &mut writer)?;
         Ok(writer.into_inner())
     }
