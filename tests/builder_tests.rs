@@ -81,7 +81,7 @@ fn test_package_with_resource(
     }
 
     // Build the package in memory.
-    let package_data = builder.build_in_memory(version)?;
+    let package_data = builder.build_to_vec(version)?;
 
     // Now let's try to parse it again.
     let package = ResourcePackage::from_memory(package_data, is_patch)?;

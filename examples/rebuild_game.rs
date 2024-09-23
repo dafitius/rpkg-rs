@@ -67,7 +67,7 @@ fn main() {
             }
 
             builder
-                .build(package.version(), output_path.join(&output_name).as_path())
+                .build_to_file(package.version(), output_path.join(&output_name).as_path())
                 .unwrap_or_else(|e| {
                     eprintln!("failed to build package '{}': {}", output_name, e);
                     std::process::exit(0);

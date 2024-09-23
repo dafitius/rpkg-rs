@@ -140,7 +140,7 @@ fn test_game_rebuild(
             }
 
             // And now build it.
-            builder.build(
+            builder.build_to_file(
                 package.version(),
                 output_path.join(&output_name).as_path(),
             )?;
