@@ -79,7 +79,7 @@ impl PartialOrd for PatchId {
 pub struct ResourcePartition {
     info: PartitionInfo,
     pub packages: HashMap<PatchId, ResourcePackage>,
-    resources: HashMap<RuntimeResourceID, PatchId>,
+    pub(crate) resources: HashMap<RuntimeResourceID, PatchId>,
 }
 
 impl ResourcePartition {

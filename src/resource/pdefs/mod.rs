@@ -50,7 +50,7 @@ pub enum PartitionInfoError {
     IdError(#[from] PartitionIdError),
 }
 
-#[derive(Clone, Debug, PartialEq, Default)]
+#[derive(Clone, Debug, PartialEq, Hash, Eq, Default)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum PartitionType {
     #[default]
@@ -61,7 +61,7 @@ pub enum PartitionType {
     LanguageDlc(String),
 }
 
-#[derive(Default, Clone, Debug, PartialEq)]
+#[derive(Default, Clone, Debug, PartialEq, Hash, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct PartitionId {
     pub part_type: PartitionType,

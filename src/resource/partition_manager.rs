@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 
 use itertools::Itertools;
 use thiserror::Error;
+use crate::resource::partition_manager::PartitionManagerError::PartitionNotFound;
 
 use crate::resource::pdefs::{
     GameDiscoveryError, GamePaths, PackageDefinitionError, PackageDefinitionSource, PartitionId,
@@ -14,7 +15,7 @@ use crate::WoaVersion;
 use super::resource_partition::{PatchId, ResourcePartition, ResourcePartitionError};
 
 #[derive(Debug, Error)]
-pub enum PackageManagerError {
+pub enum PartitionManagerError {
     #[error("Cannot use packagedefinition config: {0}")]
     PackageDefinitionError(#[from] PackageDefinitionError),
 
@@ -23,9 +24,15 @@ pub enum PackageManagerError {
 
     #[error("partition {0} could not be found")]
     PartitionNotFound(String),
+    
+    #[error("resource {0} could not be found")]
+    ResourceNotFound(String),
 
     #[error("Could not discover game paths: {0}")]
     GameDiscoveryError(#[from] GameDiscoveryError),
+    
+    #[error("Could not find a root partition")]
+    NoRootPartition(),
 }
 
 #[allow(dead_code)]
@@ -51,10 +58,10 @@ impl PartitionManager {
     pub fn new(
         runtime_directory: PathBuf,
         package_definition: &PackageDefinitionSource,
-    ) -> Result<Self, PackageManagerError> {
+    ) -> Result<Self, PartitionManagerError> {
         let partition_infos = package_definition
             .read()
-            .map_err(PackageManagerError::PackageDefinitionError)?;
+            .map_err(PartitionManagerError::PackageDefinitionError)?;
 
         Ok(Self {
             runtime_directory,
@@ -73,7 +80,7 @@ impl PartitionManager {
         retail_directory: PathBuf,
         game_version: WoaVersion,
         mount: bool,
-    ) -> Result<Self, PackageManagerError> {
+    ) -> Result<Self, PartitionManagerError> {
         Self::from_game_with_callback(retail_directory, game_version, mount, |_, _| {})
     }
 
@@ -89,7 +96,7 @@ impl PartitionManager {
         game_version: WoaVersion,
         mount: bool,
         progress_callback: F,
-    ) -> Result<Self, PackageManagerError>
+    ) -> Result<Self, PartitionManagerError>
     where
         F: FnMut(usize, &PartitionState),
     {
@@ -100,7 +107,7 @@ impl PartitionManager {
         // And read all the partition infos.
         let partition_infos = package_definition
             .read()
-            .map_err(PackageManagerError::PackageDefinitionError)?;
+            .map_err(PartitionManagerError::PackageDefinitionError)?;
 
         let mut package_manager = Self {
             runtime_directory: game_paths.runtime_path,
@@ -120,7 +127,7 @@ impl PartitionManager {
         runtime_directory: &Path,
         partition_info: PartitionInfo,
         mut progress_callback: F,
-    ) -> Result<Option<ResourcePartition>, PackageManagerError>
+    ) -> Result<Option<ResourcePartition>, PartitionManagerError>
     where
         F: FnMut(&PartitionState),
     {
@@ -138,7 +145,7 @@ impl PartitionManager {
 
         partition
             .mount_resource_packages_in_partition_with_callback(runtime_directory, callback)
-            .map_err(|e| PackageManagerError::PartitionError(partition_info.id, e))?;
+            .map_err(|e| PartitionManagerError::PartitionError(partition_info.id, e))?;
 
         if state_result.mounted {
             Ok(Some(partition))
@@ -154,7 +161,7 @@ impl PartitionManager {
     pub fn mount_partitions<F>(
         &mut self,
         mut progress_callback: F,
-    ) -> Result<(), PackageManagerError>
+    ) -> Result<(), PartitionManagerError>
     where
         F: FnMut(usize, &PartitionState),
     {
@@ -169,7 +176,7 @@ impl PartitionManager {
 
                 Self::try_read_partition(&self.runtime_directory, partition_info.clone(), callback)
             })
-            .collect::<Result<Vec<Option<ResourcePartition>>, PackageManagerError>>()?
+            .collect::<Result<Vec<Option<ResourcePartition>>, PartitionManagerError>>()?
             .into_iter()
             .flatten()
             .collect::<Vec<ResourcePartition>>();
@@ -190,7 +197,7 @@ impl PartitionManager {
         &mut self,
         partition_info: PartitionInfo,
         progress_callback: F,
-    ) -> Result<(), PackageManagerError>
+    ) -> Result<(), PartitionManagerError>
     where
         F: FnMut(&PartitionState),
     {
@@ -207,7 +214,7 @@ impl PartitionManager {
         &self,
         partition_id: PartitionId,
         rrid: RuntimeResourceID,
-    ) -> Result<Vec<u8>, PackageManagerError> {
+    ) -> Result<Vec<u8>, PartitionManagerError> {
         let partition = self
             .partitions
             .iter()
@@ -216,10 +223,10 @@ impl PartitionManager {
         if let Some(partition) = partition {
             match partition.read_resource(&rrid) {
                 Ok(data) => Ok(data),
-                Err(e) => Err(PackageManagerError::PartitionError(partition_id, e)),
+                Err(e) => Err(PartitionManagerError::PartitionError(partition_id, e)),
             }
         } else {
-            Err(PackageManagerError::PartitionNotFound(
+            Err(PartitionManagerError::PartitionNotFound(
                 partition_id.to_string(),
             ))
         }
@@ -230,7 +237,26 @@ impl PartitionManager {
             .iter()
             .find(|partition| partition.partition_info().id == partition_id)
     }
-
+    
+    pub fn root_partition(
+        &self
+    ) -> Result<PartitionId, PartitionManagerError> {
+        if let Some(mut partition) = self.partition_infos.first(){
+            loop {
+                match &partition.parent{
+                    Some(parent) => {
+                        match self.find_partition(parent.clone()){
+                            Some(part) => {partition = part.partition_info()}
+                            None => {return Err(PartitionNotFound(parent.to_string()))}
+                        };
+                    },
+                    None => return Ok(partition.id.clone()),
+                }
+            }
+        }
+        Err(PartitionManagerError::NoRootPartition())
+    }
+    
     pub fn partitions_with_resource(&self, rrid: &RuntimeResourceID) -> Vec<PartitionId> {
         self.partitions
             .iter()
@@ -244,6 +270,20 @@ impl PartitionManager {
             .collect()
     }
 
+    /// Iterates over all `RuntimeResourceID`s across all partitions.
+    ///
+    /// # Returns
+    /// An iterator yielding references to `RuntimeResourceID`.
+    pub fn iter_all_runtime_resource_ids(&self) -> impl Iterator<Item = &RuntimeResourceID> + '_ {
+        self.partitions.iter().flat_map(|partition| {
+            partition.resources.keys()
+        })
+    }
+    
+    pub fn resource_mounted(&self, rrid: &RuntimeResourceID) -> bool{
+        self.iter_all_runtime_resource_ids().contains(rrid)
+    }
+    
     pub fn resource_infos(&self, rrid: &RuntimeResourceID) -> Vec<(PartitionId, &ResourceInfo)> {
         self.partitions_with_resource(rrid)
             .into_iter()
@@ -261,7 +301,7 @@ impl PartitionManager {
         &self,
         partition_id: &PartitionId,
         rrid: &RuntimeResourceID,
-    ) -> Result<&ResourceInfo, PackageManagerError> {
+    ) -> Result<&ResourceInfo, PartitionManagerError> {
         let partition = self
             .partitions
             .iter()
@@ -270,15 +310,49 @@ impl PartitionManager {
         if let Some(partition) = partition {
             match partition.get_resource_info(rrid) {
                 Ok(info) => Ok(info),
-                Err(e) => Err(PackageManagerError::PartitionError(partition_id.clone(), e)),
+                Err(e) => Err(PartitionManagerError::PartitionError(partition_id.clone(), e)),
             }
         } else {
-            Err(PackageManagerError::PartitionNotFound(
+            Err(PartitionManagerError::PartitionNotFound(
                 partition_id.to_string(),
             ))
         }
     }
 
+    /// Resolves a resource by traversing the partition hierarchy.
+    ///
+    /// # Arguments
+    /// - `partition_id` - The ID of the partition to start resolving from.
+    /// - `resource_id` - The ID of the resource to resolve.
+    pub fn resolve_resource_from(
+        &self,
+        partition_id: PartitionId,
+        resource_id: &RuntimeResourceID,
+    ) -> Result<(&ResourceInfo, PartitionId), PartitionManagerError> {
+        match self.find_partition(partition_id.clone()) {
+            Some(partition) => {
+                if partition.contains(resource_id) {
+                    match partition.get_resource_info(resource_id) {
+                        Ok(info) => Ok((info, partition_id.clone())),
+                        Err(_) => Err(PartitionManagerError::ResourceNotFound(resource_id.to_string())),
+                    }
+                } else {
+                    match &partition.partition_info().parent {
+                        
+                        Some(parent_id) => {
+                            self.resolve_resource_from(parent_id.clone(), resource_id)
+                        },
+                        None => {
+                            Err(PartitionManagerError::ResourceNotFound(resource_id.to_string()))
+                        }
+                    }
+                }
+            },
+            None => {
+                Err(PartitionNotFound(partition_id.to_string()))
+            }
+        }
+    }
     #[deprecated(
         since = "1.0.0",
         note = "prefer direct access through the partitions field"
