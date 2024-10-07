@@ -282,12 +282,10 @@ impl PackageResourceBuilder {
     /// * `rrid` - The resource ID of the resource.
     /// * `glacier_resource` - A reference to an object implementing the `GlacierResource` trait.
     /// * `woa_version` - The HITMAN game version you want to construct the GlacierResource for
-    /// * `compression_level` - The compression level to use for the file, or None for no compression.
     pub fn from_glacier_resource<G: GlacierResource>(
         rrid: RuntimeResourceID,
         glacier_resource: &G,
-        woa_version: WoaVersion,
-        compression_level: Option<i32>,
+        woa_version: WoaVersion
     ) -> Result<Self, PackageResourceBuilderError> {
         let system_memory_requirement = glacier_resource.system_memory_requirement();
         let video_memory_requirement = glacier_resource.video_memory_requirement();
@@ -303,7 +301,7 @@ impl PackageResourceBuilder {
             references: vec![],
             blob: PackageResourceBlob::Memory {
                 data,
-                compression_level,
+                compression_level: if glacier_resource.should_compress() {Some(12)} else {None},
                 should_scramble: glacier_resource.should_scramble(),
             },
         })
