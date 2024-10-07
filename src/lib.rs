@@ -38,6 +38,9 @@ pub enum GlacierResourceError {
 
     #[error("Couldn't read the resource {0}")]
     ReadError(String),
+    
+    #[error("Couldn't write the resource {0}")]
+    WriteError(String),
 }
 
 pub trait GlacierResource: Sized {
@@ -53,4 +56,5 @@ pub trait GlacierResource: Sized {
     fn video_memory_requirement(&self) -> u64;
     fn system_memory_requirement(&self) -> u64;
     fn should_scramble(&self) -> bool;
+    fn should_compress(&self) -> bool;
 }
