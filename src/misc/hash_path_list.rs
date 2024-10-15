@@ -43,7 +43,7 @@ impl PathList {
     /// # Arguments
     ///
     /// * `path` - The path to the file to parse.
-    pub fn parse_into(&mut self, path: &Path) -> Result<&Self, PathListError> {
+    pub fn parse_into<P: AsRef<Path>>(&mut self, path: P) -> Result<&Self, PathListError> {
         let file_as_string = read_to_string(path).map_err(PathListError::IoError)?;
         let lines: Vec<_> = file_as_string.lines().map(String::from).collect();
 

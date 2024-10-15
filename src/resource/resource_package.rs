@@ -108,11 +108,13 @@ impl ResourcePackage {
     ///
     /// # Arguments
     /// * `package_path` - The path to the file to parse.
-    pub fn from_file(package_path: &Path) -> Result<Self, ResourcePackageError> {
+    pub fn from_file<P: AsRef<Path> + Copy>(package_path: P) -> Result<Self, ResourcePackageError> {
         let file = File::open(package_path).map_err(ResourcePackageError::IoError)?;
         let mmap = unsafe { Mmap::map(&file).map_err(ResourcePackageError::IoError)? };
         let mut reader = Cursor::new(&mmap[..]);
-
+        
+        let package_path = package_path.as_ref();
+        
         let is_patch = package_path
             .file_name()
             .and_then(|f| f.to_str())

@@ -336,10 +336,10 @@ impl IniFileSystem {
         Ok(ini_file)
     }
 
-    pub fn write_to_folder(&self, path: &Path) -> Result<(), IniFileError> {
-        let mut folder = path;
+    pub fn write_to_folder<P: AsRef<Path>>(&self, path: P) -> Result<(), IniFileError> {
+        let mut folder = path.as_ref();
         if folder.is_file() {
-            folder = path.parent().ok_or(IniFileError::InvalidInput(
+            folder = path.as_ref().parent().ok_or(IniFileError::InvalidInput(
                 "The export path cannot be empty".to_string(),
             ))?;
         }

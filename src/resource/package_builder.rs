@@ -1022,7 +1022,8 @@ impl PackageBuilder {
     /// # Arguments
     /// * `version` - The version of the package to build.
     /// * `output_path` - The path to the output file.
-    pub fn build_to_file(self, version: PackageVersion, output_path: &Path) -> Result<(), PackageBuilderError> {
+    pub fn build_to_file<P: AsRef<Path>>(self, version: PackageVersion, output_path: P) -> Result<(), PackageBuilderError> {
+        let output_path: &Path = output_path.as_ref();
         let output_file = match output_path.is_dir() {
             true => output_path.join(self.partition_id.to_filename(self.patch_id)),
             false => output_path.to_path_buf(),
