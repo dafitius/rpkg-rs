@@ -235,6 +235,24 @@ impl ResourcePartition {
             .collect()
     }
 
+    pub fn latest_resources_of_type(&self, resource_type: &str) -> Vec<(&ResourceInfo, PatchId)>{
+        self.resources
+            .iter()
+            .flat_map(|(rrid, idx)| {
+                if let Ok(info) = self.resource_info_from(rrid, *idx) {
+                    Some((info, *idx))
+                } else {
+                    None
+                }
+            }).filter(|(resource, _)| resource.data_type() == resource_type)
+            .collect()
+    }
+    
+    pub fn latest_resources_of_glacier_type<G: GlacierResource>(&self) -> Vec<(&ResourceInfo, PatchId)>{
+        let resource_type: String = String::from_utf8_lossy(&G::resource_type()).into_owned();
+        self.latest_resources_of_type(resource_type.as_str())
+    }
+    
     pub fn read_resource(
         &self,
         rrid: &RuntimeResourceID,
@@ -278,7 +296,7 @@ impl ResourcePartition {
 
         T::process_data(woa_version, bytes).map_err(ResourcePartitionError::ResourceError)
     }
-
+    
     pub fn read_resource_from(
         &self,
         rrid: &RuntimeResourceID,

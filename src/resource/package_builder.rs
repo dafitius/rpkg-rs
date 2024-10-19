@@ -295,7 +295,7 @@ impl PackageResourceBuilder {
 
         Ok(Self {
             rrid,
-            resource_type: glacier_resource.resource_type().into_iter().rev().collect::<Vec<_>>().try_into().unwrap(),
+            resource_type: G::resource_type().into_iter().rev().collect::<Vec<_>>().try_into().unwrap(),
             system_memory_requirement: u32::try_from(system_memory_requirement).unwrap_or(u32::MAX),
             video_memory_requirement: u32::try_from(video_memory_requirement).unwrap_or(u32::MAX),
             references: vec![],

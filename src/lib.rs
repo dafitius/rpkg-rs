@@ -52,7 +52,7 @@ pub trait GlacierResource: Sized {
 
     fn serialize(&self, woa_version: WoaVersion) -> Result<Vec<u8>, GlacierResourceError>;
 
-    fn resource_type(&self) -> [u8; 4];
+    fn resource_type() -> [u8; 4];
     fn video_memory_requirement(&self) -> u64;
     fn system_memory_requirement(&self) -> u64;
     fn should_scramble(&self) -> bool;
