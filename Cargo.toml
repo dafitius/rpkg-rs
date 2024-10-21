@@ -4,6 +4,7 @@ version = "1.1.2"
 edition = "2021"
 license = "Apache-2.0"
 categories = ["game-development", "data-structures", "parser-implementations"]
+keywords = ["game-archive", "hitman", "glacier", "rpkg", "moddng"]
 description = "Parse Glacier ResourcePackage (rpkg) files, allowing access to the resources stored within."
 repository = "https://github.com/dafitius/rpkg-rs"
 readme = "README.md"
@@ -13,7 +14,7 @@ status = "actively-developed"
 
 [dependencies]
 binrw = "0.14.0"
-bitfield-struct = "0.8.0"
+bitfield-struct = "0.9.2"
 memmap2 = "0.9.4"
 lazy-regex = "3.3.0"
 lzzzz = "1.1.0"
