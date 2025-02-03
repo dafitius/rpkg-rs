@@ -222,6 +222,10 @@ impl ResourcePartition {
         self.packages.len().saturating_sub(1)
     }
 
+    /// Returns the latest valid version of all resources.
+    ///
+    /// This function iterates through the resources in the partition
+    /// Will only contain the latest version of a resource and will ignore resources if they are removed by a package.
     pub fn latest_resources(&self) -> Vec<(&ResourceInfo, PatchId)> {
         self.resources
             .iter()
@@ -251,6 +255,40 @@ impl ResourcePartition {
     pub fn latest_resources_of_glacier_type<G: GlacierResource>(&self) -> Vec<(&ResourceInfo, PatchId)>{
         let resource_type: String = String::from_utf8_lossy(&G::resource_type()).into_owned();
         self.latest_resources_of_type(resource_type.as_str())
+    }
+
+    /// Returns a list of resources that have been removed.
+    ///
+    /// This function goes through the partition and returns a list of resource marked as unneeded (i.e., deleted). 
+    /// Only resources actually deleted resources will be returned, if a resource is removed and the added again it will be ignored.
+    /// If a package deletes a resource that was never present in any previous package, it will not be included in the returned list
+    pub fn removed_resources(&self) -> Vec<(&ResourceInfo, PatchId)> {
+
+        self.packages
+            .iter()
+            .flat_map(|(patch_id, package)| {
+                package
+                    .unneeded_resource_ids()
+                    .iter()
+                    .map(|&deletion| (*patch_id, *deletion)).collect::<Vec<_>>()
+            }).filter_map(|(_, deletion_rid)| {
+                let patches = self.resource_patch_indices(&deletion_rid);
+                if patches.is_empty() { return None } //resource is not present in any patch
+                if self.resources.contains_key(&deletion_rid) { return None } //resource was deleted, but was added again
+                patches.iter().max().and_then(|&latest_patch| {
+                    self.resource_info_from(&deletion_rid, latest_patch)
+                        .ok().map(|resource_info| (resource_info, latest_patch))
+                })
+            }).collect()
+    }
+
+    pub fn removed_resources_of_type(&self, resource_type: &str) -> Vec<(&ResourceInfo, PatchId)> {
+        self.removed_resources().iter().filter(|(res_info, _)| res_info.data_type() == resource_type).cloned().collect()
+    }
+
+    pub fn removed_resources_of_glacier_type<G: GlacierResource>(&self) -> Vec<(&ResourceInfo, PatchId)>{
+        let resource_type: String = String::from_utf8_lossy(&G::resource_type()).into_owned();
+        self.removed_resources_of_type(resource_type.as_str())
     }
     
     pub fn read_resource(
