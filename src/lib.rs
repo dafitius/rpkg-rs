@@ -1,4 +1,4 @@
-#![doc(html_root_url = "https://docs.rs/rpkg-rs/1.1.2")]
+#![doc(html_root_url = "https://docs.rs/rpkg-rs/1.2.0")]
 //! `rpkg-rs` provides comprehensive functionality for interacting with `ResourcePackage` (rpkg) files found within Hitman games.
 //! This crate facilitates parsing of these files, enabling seamless access to the contained resource files.
 //! By parsing configuration files such as `thumbs.ini` and `packagedefintion.txt`, rpkg-rs offers extensive support for reading and manipulating these packages.

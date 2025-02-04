@@ -1,6 +1,6 @@
 [package]
 name = "rpkg-rs"
-version = "1.1.2"
+version = "1.2.0"
 edition = "2021"
 license = "Apache-2.0"
 categories = ["game-development", "data-structures", "parser-implementations"]
@@ -13,21 +13,21 @@ readme = "README.md"
 status = "actively-developed"
 
 [dependencies]
-binrw = "0.14.0"
-bitfield-struct = "0.9.2"
-memmap2 = "0.9.4"
-lazy-regex = "3.3.0"
-lzzzz = "1.1.0"
+binrw = "0.14.1"
+bitfield-struct = "0.10.1"
+memmap2 = "0.9.5"
+lazy-regex = "3.4.1"
+lzzzz = "2.0.0"
 pathdiff = "0.2.1"
-itertools = { version = "0.13.0", features = [] }
-thiserror = "1.0.63"
+itertools = { version = "0.14.0", features = [] }
+thiserror = "2.0.11"
 md-5 = "0.10.6"
 extended-tea = "0.1.1"
 byteorder = "1.5.0"
 rayon = { version = "1.10.0", optional = true}
-serde = { version = "1.0.210", optional = true, features = ["derive"] }
+serde = { version = "1.0.217", optional = true, features = ["derive"] }
 serde-hex = { version = "0.1.0", optional = true }
-indexmap = "2.5.0"
+indexmap = "2.7.1"
 crc32fast = "1.4.2"
 
 [features]
