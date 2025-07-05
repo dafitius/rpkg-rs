@@ -5,3 +5,4 @@ pub mod resource_info;
 pub mod resource_package;
 pub mod resource_partition;
 pub mod runtime_resource_id;
+pub mod legacy;
