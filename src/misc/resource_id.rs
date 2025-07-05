@@ -44,7 +44,7 @@ impl FromStr for ResourceID {
         };
 
         Ok(Self {
-            uri: rid.uri.replace(format!("{}_", CONSOLE_TAG).as_str(), ""),
+            uri: rid.uri.replace(format!("{CONSOLE_TAG}_").as_str(), ""),
         })
     }
 }
@@ -69,7 +69,7 @@ impl ResourceID {
     pub fn create_derived(&self, parameters: &str, extension: &str) -> ResourceID {
         let mut derived = format!("[{}]", self.uri);
         if !parameters.is_empty() {
-            derived += format!("({})", parameters).as_str();
+            derived += format!("({parameters})").as_str();
         }
         derived += ".";
         if !extension.is_empty() {

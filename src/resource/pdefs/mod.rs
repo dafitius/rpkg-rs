@@ -73,11 +73,11 @@ impl PartitionId {
         match patch_index {
             PatchId::Base => {
                 let base = self.to_string();
-                format!("{}.rpkg", base)
+                format!("{base}.rpkg")
             }
             PatchId::Patch(patch_idx) => {
                 let base = self.to_string();
-                format!("{}patch{}.rpkg", base, patch_idx)
+                format!("{base}patch{patch_idx}.rpkg")
             }
         }
     }
@@ -131,8 +131,7 @@ impl FromStr for PartitionId {
             });
         }
         Err(PartitionIdError::ParsingError(format!(
-            "Unable to parse {} to a partitionId",
-            id
+            "Unable to parse {id} to a partitionId"
         )))
     }
 }
@@ -156,7 +155,7 @@ impl Display for PartitionId {
                 format!("dlc{}lang{}", self.index, lang)
             }
         };
-        write!(f, "{}", str)
+        write!(f, "{str}")
     }
 }
 

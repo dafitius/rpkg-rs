@@ -124,7 +124,7 @@ impl IniFileSection {
     pub fn write_section<W: std::fmt::Write>(&self, writer: &mut W) {
         writeln!(writer, "[{}]", self.name).unwrap();
         for (key, value) in &self.options {
-            writeln!(writer, "{}={}", key, value).unwrap();
+            writeln!(writer, "{key}={value}").unwrap();
         }
         writeln!(writer).unwrap();
     }
@@ -223,7 +223,7 @@ impl IniFile {
 
     pub fn write_ini_file<W: std::fmt::Write>(&self, writer: &mut W) {
         if let Some(description) = &self.description {
-            writeln!(writer, "# {}", description).unwrap();
+            writeln!(writer, "# {description}").unwrap();
             writeln!(writer, "\n# -----------------------------------------------------------------------------\n", ).unwrap();
         }
         for include in &self.includes {
@@ -239,7 +239,7 @@ impl IniFile {
             }
         }
         for console_cmd in &self.console_cmds {
-            writeln!(writer, "ConsoleCmd {}", console_cmd).unwrap();
+            writeln!(writer, "ConsoleCmd {console_cmd}").unwrap();
         }
     }
 }
