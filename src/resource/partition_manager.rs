@@ -1,6 +1,9 @@
+use rayon::iter::ParallelIterator;
+use rayon::iter::IndexedParallelIterator;
 use std::path::{Path, PathBuf};
-
+use std::sync::{Arc, Mutex};
 use itertools::Itertools;
+use rayon::prelude::IntoParallelRefIterator;
 use thiserror::Error;
 use crate::resource::partition_manager::PartitionManagerError::PartitionNotFound;
 
@@ -31,6 +34,9 @@ pub enum PartitionManagerError {
     #[error("Could not discover game paths: {0}")]
     GameDiscoveryError(#[from] GameDiscoveryError),
     
+    #[error("Could not locate runtime directory: {0}")]
+    RuntimeDirectoryNotFound(PathBuf),
+    
     #[error("Could not find a root partition")]
     NoRootPartition(),
 }
@@ -49,6 +55,29 @@ pub struct PartitionManager {
     pub partitions: Vec<ResourcePartition>, //All mounted partitions
 }
 
+#[cfg(feature = "rayon")]
+pub trait PartitionManagerPar {
+    fn from_game_par(
+        retail_directory: PathBuf,
+        game_version: WoaVersion,
+        mount: bool,
+    ) -> Result<Self, PartitionManagerError> where Self: Sized;
+
+    fn from_game_with_callback_par<F>(
+        retail_directory: PathBuf,
+        game_version: WoaVersion,
+        mount: bool,
+        progress_callback: F,
+    ) -> Result<Self, PartitionManagerError>
+    where
+        F: FnMut(usize, &PartitionState) + Send + Sync, Self: Sized;
+
+    fn mount_partitions_par<F>(&mut self, progress_callback: F) -> Result<(), PartitionManagerError>
+    where
+        F: FnMut(usize, &PartitionState) + Send + Sync;
+
+}
+
 impl PartitionManager {
     /// Create a new PartitionManager for the game at the given path, and a custom package definition.
     ///
@@ -59,6 +88,11 @@ impl PartitionManager {
         runtime_directory: PathBuf,
         package_definition: &PackageDefinitionSource,
     ) -> Result<Self, PartitionManagerError> {
+        
+        if !runtime_directory.exists() {
+            return Err(PartitionManagerError::RuntimeDirectoryNotFound(runtime_directory));
+        }
+        
         let partition_infos = package_definition
             .read()
             .map_err(PartitionManagerError::PackageDefinitionError)?;
@@ -417,5 +451,96 @@ impl PartitionManager {
                 }
             }
         }
+    }
+}
+
+#[cfg(feature = "rayon")]
+impl PartitionManagerPar for PartitionManager {
+    /// Create a new PartitionManager by mounting the game at the given path, but parallel.
+    ///
+    /// # Arguments
+    /// - `retail_path` - The path to the game's retail directory.
+    /// - `game_version` - The version of the game.
+    /// - `mount` - Indicates whether to automatically mount the partitions, can eliminate the need to call `mount_partitions_par` separately
+    fn from_game_par(
+        retail_directory: PathBuf,
+        game_version: WoaVersion,
+        mount: bool,
+    ) -> Result<Self, PartitionManagerError> {
+        Self::from_game_with_callback_par(retail_directory, game_version, mount, |_, _| {})
+    }
+
+    /// Create a new PartitionManager by mounting the game at the given path, but parallel.
+    ///
+    /// # Arguments
+    /// - `retail_path` - The path to the game's retail directory.
+    /// - `game_version` - The version of the game.
+    /// - `mount` - Indicates whether to automatically mount the partitions, can eliminate the need to call `mount_partitions_par` separately
+    /// - `progress_callback` - A callback function that will be called with the current mounting progress.
+    fn from_game_with_callback_par<F>(
+        retail_directory: PathBuf,
+        game_version: WoaVersion,
+        mount: bool,
+        progress_callback: F,
+    ) -> Result<Self, PartitionManagerError>
+    where
+        F: FnMut(usize, &PartitionState) + Send + Sync,
+    {
+        let game_paths = GamePaths::from_retail_directory(retail_directory)?;
+        let package_definition =
+            PackageDefinitionSource::from_file(game_paths.package_definition_path, game_version)?;
+
+        // And read all the partition infos.
+        let partition_infos = package_definition
+            .read()
+            .map_err(PartitionManagerError::PackageDefinitionError)?;
+
+        let mut package_manager = Self {
+            runtime_directory: game_paths.runtime_path,
+            partition_infos,
+            partitions: vec![],
+        };
+
+        // If the user requested auto mounting, do it.
+        if mount {
+            package_manager.mount_partitions_par(progress_callback)?;
+        }
+
+        Ok(package_manager)
+    }
+
+    /// Mount all the partitions in the game, parallelly.
+    ///
+    /// # Arguments
+    /// - `progress_callback` - A callback function that will be called with the current mounting progress.
+    fn mount_partitions_par<F>(&mut self, progress_callback: F) -> Result<(), PartitionManagerError>
+    where
+        F: FnMut(usize, &PartitionState) + Send + Sync,
+    {
+        let progress_callback = Arc::new(Mutex::new(progress_callback));
+
+        let runtime_directory = self.runtime_directory.clone(); // Clone if needed
+
+        let results: Result<Vec<_>, PartitionManagerError> = self.partition_infos
+            .par_iter()
+            .enumerate()
+            .map(|(index, partition_info)| {
+                Self::try_read_partition(&runtime_directory, partition_info.clone(), |state| {
+                    let mut cb = progress_callback.lock().unwrap();
+                    cb(index, state)
+                })
+            })
+            .filter_map(|result| match result {
+                Ok(Some(partition)) => Some(Ok(partition)),
+                Ok(None) => None,
+                Err(e) => Some(Err(e)),
+            })
+            .collect();
+
+        for partition in results? {
+            self.partitions.push(partition);
+        }
+
+        Ok(())
     }
 }
