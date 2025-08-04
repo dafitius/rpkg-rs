@@ -107,7 +107,7 @@ impl PackageDefinitionParser for H2016Parser {
 }
 
 fn try_read_partition_name(lines: Vec<&str>) -> Option<String> {
-    let reg = regex!(r"## --- (?:DLC|Chunk )\d{2} (.*)");
+    let reg = regex!(r"## --- +(?:DLC|Chunk )\d{2} (.*)");
     for line in lines {
         if reg.is_match(line) {
             if let Some(m) = reg.captures_iter(line).next() {
