@@ -21,16 +21,8 @@ This crate facilitates parsing of these files, enabling seamless access to the c
 #### Supported File Formats:
 - ResourcePackage v1 (RPKG) files found in Hitman 2016 and Hitman 2.
 - ResourcePackage v2 (RPK2) files found in Hitman 3.
-- IniFile (thumbs.dat) files.
+- Various legacy ResourcePackage (RPKG) files found in Hitman 2016 alpha builds
 - PackageDefinitions (packagedefinition.txt) from Hitman 2016, Hitman 2, and Hitman 3, with API support for adding custom parsers.
-
-
-## Future Plans
-
-- **Alpha Format Support:** Extend `ResourcePackge` support for the older alpha format, enabling extraction of alpha resources.
-- **RPKG File Generation:** Integration of support for generating rpkg files, allowing users to efficiently create and manage their resource packages within the `rpkg-rs` crate.
-
-These upcoming features are designed to further solidify `rpkg-rs` as a comprehensive solution for interacting with Glacier game files.
 
 ## Contributions
 Bug reports, PRs and feature requests are welcome.
