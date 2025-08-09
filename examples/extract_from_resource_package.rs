@@ -1,29 +1,55 @@
+use clap::{Arg, Command};
 use rpkg_rs::misc::resource_id::ResourceID;
+use rpkg_rs::resource::legacy::Format;
 use rpkg_rs::resource::resource_package::ResourcePackage;
 use rpkg_rs::resource::runtime_resource_id::RuntimeResourceID;
-use std::env;
 use std::path::PathBuf;
 use std::str::FromStr;
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
+    let matches = Command::new("Extract from rpkg example")
+        .about("Extracts a resource from a package using rpkg_rs")
+        .arg(
+            Arg::new("package")
+                .help("Path to the resource package")
+                .required(true)
+                .value_parser(clap::value_parser!(PathBuf)),
+        )
+        .arg(
+            Arg::new("resource_id")
+                .help("ResourceID to extract")
+                .required(true),
+        )
+        .arg(
+            Arg::new("legacy")
+                .help("Read legacy resource content")
+                .long("legacy")
+                .short('l')
+                .action(clap::ArgAction::SetTrue),
+        )
+        .get_matches();
 
-    if args.len() < 3 {
-        eprintln!("Usage: cargo run --example <example_name> -- <path to a package> <ResourceId to extract>");
-        return;
-    }
+    let package_path: PathBuf = matches.get_one::<PathBuf>("package").unwrap().clone();
+    let rid_str = matches.get_one::<String>("resource_id").unwrap();
+    let legacy = *matches.get_one::<bool>("legacy").unwrap_or(&false);
 
-    //set the args
-    let package_path = PathBuf::from(&args[1]);
-    let rid = ResourceID::from_str(&args[2]).unwrap_or_else(|_| {
+    let rid = ResourceID::from_str(rid_str).unwrap_or_else(|_| {
         println!("Given ResourceID is invalid");
-        std::process::exit(0)
+        std::process::exit(1)
     });
 
     let rrid: RuntimeResourceID = RuntimeResourceID::from_resource_id(&rid);
 
     println!("Parsing the resource package at {}", package_path.display());
-    let rpkg = ResourcePackage::from_file(&package_path).unwrap_or_else(|e| {
+    let rpkg = if !legacy {
+        ResourcePackage::from_file(&package_path)
+    } else {
+        rpkg_rs::resource::legacy::read_package_from_file(
+            Format::CL535848,
+            package_path,
+        )
+    }
+    .unwrap_or_else(|e| {
         println!("Failed parse resource package: {}", e);
         std::process::exit(0)
     });
