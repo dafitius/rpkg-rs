@@ -21,7 +21,7 @@ use serde::{Deserialize, Serialize};
 pub mod encryption;
 pub mod misc;
 pub mod resource;
-pub mod utils;
+pub(crate) mod utils;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]

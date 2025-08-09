@@ -2,7 +2,7 @@ use std::ffi::OsString;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
-pub fn read_file_names(path: &Path) -> Vec<OsString> {
+pub(crate) fn read_file_names(path: &Path) -> Vec<OsString> {
     match fs::read_dir(path) {
         Ok(entries) => entries
             .flatten()
@@ -15,7 +15,7 @@ pub fn read_file_names(path: &Path) -> Vec<OsString> {
     }
 }
 
-pub fn normalize_path(path: &Path) -> PathBuf {
+pub(crate) fn normalize_path(path: &Path) -> PathBuf {
     let mut components = path.components().peekable();
     let mut ret = if let Some(c @ Component::Prefix(..)) = components.peek().cloned() {
         components.next();

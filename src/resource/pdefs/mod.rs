@@ -1,14 +1,14 @@
 use std::fmt::Display;
 use std::path::PathBuf;
 use std::str::FromStr;
-
+use glacier_ini::ini_file::IniFileError;
+use glacier_ini::IniFileSystem;
 use lazy_regex::regex;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::encryption::xtea::XteaError;
-use crate::misc::ini_file_system::{IniFileError, IniFileSystem};
 use crate::misc::resource_id::ResourceID;
 use crate::resource::pdefs::GameDiscoveryError::InvalidRuntimePath;
 use crate::resource::pdefs::PackageDefinitionSource::{HM2, HM2016, HM3};
@@ -315,7 +315,7 @@ impl GamePaths {
         let thumbs_path = retail_directory.join("thumbs.dat");
 
         // Parse the thumbs file, so we can find the runtime path.
-        let thumbs = IniFileSystem::from(thumbs_path.as_path())
+        let thumbs = IniFileSystem::from_path(thumbs_path.as_path())
             .map_err(GameDiscoveryError::FailedToParseThumbsFile)?;
 
         let app_options = &thumbs.root()["application"];
