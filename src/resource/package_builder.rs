@@ -1,3 +1,4 @@
+use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io;
@@ -323,6 +324,21 @@ impl PackageResourceBuilder {
         self
     }
 
+    /// Adds multiple references to the resource at once.
+    ///
+    /// Accepts any iterable of `(RuntimeResourceID, ResourceReferenceFlags)` pairs.
+    ///
+    /// # Examples
+    /// builder.with_references(vec![(id1, flags1), (id2, flags2)]);
+    pub fn with_references<I, P>(&mut self, refs: I) -> &mut Self
+    where
+        I: IntoIterator<Item = P>,
+        P: Borrow<(RuntimeResourceID, ResourceReferenceFlags)>,
+        (RuntimeResourceID, ResourceReferenceFlags): Copy,
+    {
+        self.references.extend(refs.into_iter().map(|p| *p.borrow()));
+        self
+    }
     /// Sets the memory requirements of the resource.
     ///
     /// # Arguments
@@ -606,12 +622,42 @@ impl PackageBuilder {
         self
     }
 
+    /// Adds multiple resources to the package at once.
+    ///
+    /// If a resource with the same resource ID already exists, it will be overwritten.
+    ///
+    /// # Arguments
+    /// * `resources` - An iterable of `PackageResourceBuilder`s to add.
+    pub fn with_resources<I>(&mut self, resources: I) -> &mut Self
+    where
+        I: IntoIterator<Item = PackageResourceBuilder>,
+    {
+        self.resources
+            .extend(resources.into_iter().map(|r| (r.rrid, r)));
+        self
+    }
+
     /// Adds an unneeded resource to the package.
     ///
     /// # Arguments
     /// * `rrid` - The resource ID of the resource.
     pub fn with_unneeded_resource(&mut self, rrid: RuntimeResourceID) -> &mut Self {
         self.unneeded_resources.insert(rrid);
+        self
+    }
+
+
+    /// Marks multiple resources as unneeded.
+    ///
+    /// # Arguments
+    /// * `rrids` - An iterable of resource IDs to mark as unneeded.
+    pub fn with_unneeded_resources<I, P>(&mut self, rrids: I) -> &mut Self
+    where
+        I: IntoIterator<Item = P>,
+        P: Borrow<RuntimeResourceID>, 
+        RuntimeResourceID: Copy,
+    {
+        self.unneeded_resources.extend(rrids.into_iter().map(|p| *p.borrow()));
         self
     }
 
