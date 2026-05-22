@@ -1,7 +1,7 @@
 use crate::encryption::xtea::Xtea;
 use crate::misc::resource_id::ResourceID;
 use crate::resource::pdefs::{
-    PackageDefinitionError, PackageDefinitionParser, PartitionId, PartitionInfo, PartitionType,
+    PackageDefinitionError, PackageDefinitionParser, PartitionId, PartitionInfo, PartitionType, RESOURCE_PATH_REGEX,
 };
 use lazy_regex::regex;
 use std::str::FromStr;
@@ -23,7 +23,6 @@ impl PackageDefinitionParser for HM3Parser {
         //define the regex
         let partition_regex =
             regex!(r"@partition name=(.+?) parent=(.+?) type=(.+?) patchlevel=(.\d*)");
-        let resource_path_regex = regex!(r"(\[[a-z]+:/.+?]).([a-z]+)");
 
         //try to match the regex on a per-line basis
         for line in deciphered_data.lines() {
@@ -44,8 +43,8 @@ impl PackageDefinitionParser for HM3Parser {
                         roots: vec![],
                     });
                 }
-            } else if resource_path_regex.is_match(line) {
-                if let Some(m) = resource_path_regex.captures_iter(line).next() {
+            } else if RESOURCE_PATH_REGEX.is_match(line) {
+                if let Some(m) = RESOURCE_PATH_REGEX.captures_iter(line).next() {
                     if let Some(current_partition) = partitions.last_mut() {
                         if let Ok(rid) =
                             ResourceID::from_str(format!("{}.{}", &m[1], &m[2]).as_str())
