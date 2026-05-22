@@ -17,7 +17,7 @@ use thiserror::Error;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-static CONSOLE_TAG: &str = "pc";
+static PLATFORM_TAG: &str = "pc";
 
 #[derive(Error, Debug)]
 pub enum ResourceIDError {
@@ -44,7 +44,7 @@ impl FromStr for ResourceID {
         };
 
         Ok(Self {
-            uri: rid.uri.replace(format!("{CONSOLE_TAG}_").as_str(), ""),
+            uri: rid.uri.replace(format!("].{PLATFORM_TAG}_").as_str(), "]."),
         })
     }
 }
@@ -266,6 +266,20 @@ impl ResourceID {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn test_creation() -> Result<(), ResourceIDError> {
+        let resource_id = ResourceID::from_str(
+            "[assembly:/_PRO/Scenes/Missions/thefacility/vr_tutorial_pc_graduation.brick].entitytype"
+        )?;
+        assert_eq!(resource_id.resource_path(), "[assembly:/_pro/scenes/missions/thefacility/vr_tutorial_pc_graduation.brick].pc_entitytype");
+
+        let resource_id = ResourceID::from_str(
+            "[assembly:/_PRO/Scenes/Missions/thefacility/vr_tutorial_pc_graduation.brick].pc_entitytype"
+        )?;
+        assert_eq!(resource_id.uri, "[assembly:/_pro/scenes/missions/thefacility/vr_tutorial_pc_graduation.brick].entitytype");
+        Ok(())
+    }
+
     #[test]
     fn test_parameters() -> Result<(), ResourceIDError> {
         let mut resource_id = ResourceID::from_str(
