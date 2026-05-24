@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use glacier_ini::ini_file::IniFileError;
 use glacier_ini::IniFileSystem;
-use lazy_regex::regex;
+use lazy_regex::{Lazy, Regex, regex};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -19,6 +19,8 @@ use crate::{utils, WoaVersion};
 pub mod h2016_parser;
 pub mod hm2_parser;
 pub mod hm3_parser;
+
+const RESOURCE_PATH_REGEX: &Lazy<Regex> = regex!(r"(\[[A-z]+:/.+?]).([A-z]+)");
 
 #[derive(Debug, Error)]
 pub enum PackageDefinitionError {
