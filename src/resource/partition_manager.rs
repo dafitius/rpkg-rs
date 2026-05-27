@@ -413,7 +413,7 @@ impl PartitionManager {
             let occurrences = changes
                 .clone()
                 .into_iter()
-                .chain(deletions.clone().into_iter())
+                .chain(deletions.clone())
                 .collect::<Vec<PatchId>>();
 
             for occurence in occurrences.iter().sorted() {

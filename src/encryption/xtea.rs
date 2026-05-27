@@ -56,7 +56,7 @@ impl Xtea {
         let checksum = &input_buffer[payload_start - 4..payload_start];
         let input = &input_buffer[payload_start..];
 
-        if input.len() % 8 != 0 {
+        if !input.len().is_multiple_of(8) {
             return Err(InvalidInput(
                 "Input must be of a length divisible by 8".to_string(),
             ));
@@ -86,7 +86,7 @@ impl Xtea {
     pub fn decrypt_string(input_buffer: &[u8], key: &[u32; 4]) -> Result<String, XteaError> {
         let input = &input_buffer;
 
-        if input.len() % 8 != 0 {
+        if !input.len().is_multiple_of(8) {
             return Err(InvalidInput(
                 "Input must be of a length divisible by 8".to_string(),
             ));

@@ -9,15 +9,13 @@
 //! [[assembly:/images/sprites/player.jpg](asspritesheet).pc_jpeg].pc_png
 //! ```
 
-use crate::resource::runtime_resource_id::RuntimeResourceID;
+use crate::resource::runtime_resource_id::{PlatformTag, RuntimeResourceID};
 use lazy_regex::regex;
 use std::str::FromStr;
 use thiserror::Error;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
-
-static PLATFORM_TAG: &str = "pc";
 
 #[derive(Error, Debug)]
 pub enum ResourceIDError {
@@ -37,15 +35,31 @@ impl FromStr for ResourceID {
     fn from_str(source: &str) -> Result<Self, Self::Err> {
         let mut uri = source.to_ascii_lowercase();
         uri.retain(|c| c as u8 > 0x1F);
-        let rid = Self { uri };
+        let rid = Self { uri: uri.clone() };
 
         if !rid.is_valid() {
             return Err(ResourceIDError::InvalidFormat("".to_string()));
         };
 
-        Ok(Self {
-            uri: rid.uri.replace(format!("].{PLATFORM_TAG}_").as_str(), "]."),
-        })
+        let agnostic_uri = if let Some(dot) = uri.rfind('.') {
+            let left = &uri[..=dot];
+            let right = &uri[dot + 1..];
+
+            let mut out = String::with_capacity(uri.len());
+            out.push_str(left);
+
+            if let Some(underscore) = right.find('_') {
+                out.push_str(&right[underscore + 1..]);
+            } else {
+                out.push_str(right);
+            }
+
+            out
+        } else {
+            uri
+        };
+
+        Ok(Self { uri: agnostic_uri })
     }
 }
 
@@ -62,7 +76,7 @@ impl ResourceID {
     /// # fn main() -> Result<(), ResourceIDError>{
     ///     let resource_id = ResourceID::from_str("[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].pc_fx")?;
     ///     let derived = resource_id.create_derived("dx11", "mate");
-    ///     assert_eq!(derived.resource_path(), "[[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx](dx11).pc_mate");
+    ///     assert_eq!(derived.resource_path_with_platform("pc"), "[[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx](dx11).pc_mate");
     /// #   Ok(())
     /// # }
     /// ```
@@ -93,7 +107,7 @@ impl ResourceID {
     ///
     ///     let aspect = resource_id.create_aspect(vec![&sub_id_1, &sub_id_2]);
     ///
-    ///     assert_eq!(aspect.resource_path(), "[assembly:/templates/aspectdummy.aspect]([assembly:/_pro/effects/geometry/water.prim].entitytype,[modules:/zdisablecameracollisionaspect.class].entitytype).pc_entitytype");
+    ///     assert_eq!(aspect.resource_path_with_platform("pc"), "[assembly:/templates/aspectdummy.aspect]([assembly:/_pro/effects/geometry/water.prim].entitytype,[modules:/zdisablecameracollisionaspect.class].entitytype).pc_entitytype");
     /// #   Ok(())
     /// # }
     ///
@@ -135,12 +149,31 @@ impl ResourceID {
 
     /// Get the resource path.
     /// Will append the platform tag
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use resource_path_with_platform(\"pc\") instead \
+        resource_path() is not platform_agnostic and will always append the pc platform tag. \
+        This function will be made platform agnostic in an upcoming release \
+        Use uri() for the platform-agnostic form or resource_path_with_platform(...) for a platform specific form.\
+        "
+    )]
     pub fn resource_path(&self) -> String {
+        self.resource_path_with_platform("pc")
+    }
+
+    pub fn uri(&self) -> &str {
+        &self.uri
+    }
+
+    pub fn resource_path_with_platform(&self, platform_tag: &str) -> String {
         let mut platform_uri = String::new();
 
         if let Some(dot) = self.uri.rfind('.') {
             platform_uri.push_str(&self.uri[..=dot]);
-            platform_uri.push_str("pc_");
+            if !platform_tag.is_empty(){
+                platform_uri.push_str(platform_tag);
+                platform_uri.push('_');
+            }
             platform_uri.push_str(&self.uri[dot + 1..]);
             platform_uri
         } else {
@@ -156,7 +189,7 @@ impl ResourceID {
     /// # fn main() -> Result<(), ResourceIDError>{
     ///     let resource_id = ResourceID::from_str("[[[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx](dx11).mate](dx12).pc_mate")?;
     ///     let inner_most_path = resource_id.inner_most_resource_path();
-    ///     assert_eq!(inner_most_path.resource_path(), "[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].pc_fx");
+    ///     assert_eq!(inner_most_path.uri(), "[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx");
     /// #    Ok(())
     /// # }
     /// ```
@@ -188,7 +221,7 @@ impl ResourceID {
     ///     let resource_id = ResourceID::from_str("[[[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx](dx11).mate](dx12).pc_mate")?;
     ///     let inner_path = resource_id.inner_resource_path();
     ///
-    ///     assert_eq!(inner_path.resource_path(), "[[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx](dx11).pc_mate");
+    ///     assert_eq!(inner_path.resource_path_with_platform("pc"), "[[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx](dx11).pc_mate");
     /// #   Ok(())
     /// }
     ///
@@ -252,14 +285,24 @@ impl ResourceID {
     pub fn is_valid(&self) -> bool {
         {
             self.uri.starts_with('[')
-                && !self.uri.contains("unknown")
+                && !self.uri.contains("unknown") //This isn't a good check :/
                 && !self.uri.contains('*')
                 && self.uri.contains(']')
         }
     }
 
+    #[deprecated(
+        since = "1.4.0",
+        note = "into_rrid() hashes the ResourceID using PlatformTag::None. \
+        Use into_rrid_with_platform(..., ..., PlatformTag::None) instead. \
+        In a future release `into_rrid()` will require a runtime platform tag."
+    )]
     pub fn into_rrid(self) -> RuntimeResourceID {
-        RuntimeResourceID::from_resource_id(&self)
+        RuntimeResourceID::from_resource_id_with_platform(&self, "", PlatformTag::None)
+    }
+
+    pub fn into_rrid_with_platform(self, resource_platform: &str, runtime_platform: PlatformTag) -> RuntimeResourceID {
+        RuntimeResourceID::from_resource_id_with_platform(&self, resource_platform, runtime_platform)
     }
 }
 
@@ -268,29 +311,85 @@ mod tests {
     use super::*;
     #[test]
     fn test_creation() -> Result<(), ResourceIDError> {
-        let resource_id = ResourceID::from_str(
-            "[assembly:/_PRO/Scenes/Missions/thefacility/vr_tutorial_pc_graduation.brick].entitytype"
-        )?;
-        assert_eq!(resource_id.resource_path(), "[assembly:/_pro/scenes/missions/thefacility/vr_tutorial_pc_graduation.brick].pc_entitytype");
 
-        let resource_id = ResourceID::from_str(
-            "[assembly:/_PRO/Scenes/Missions/thefacility/vr_tutorial_pc_graduation.brick].pc_entitytype"
+        let rid = ResourceID::from_str(
+            "[assembly:/_PRO/Scenes/Missions/thefacility/vr_tutorial_pc_graduation.brick].entitytype",
         )?;
-        assert_eq!(resource_id.uri, "[assembly:/_pro/scenes/missions/thefacility/vr_tutorial_pc_graduation.brick].entitytype");
+        assert_eq!(
+            rid.uri(),
+            "[assembly:/_pro/scenes/missions/thefacility/vr_tutorial_pc_graduation.brick].entitytype"
+        );
+        assert_eq!(
+            rid.resource_path_with_platform("pc"),
+            "[assembly:/_pro/scenes/missions/thefacility/vr_tutorial_pc_graduation.brick].pc_entitytype"
+        );
+
+        let rid = ResourceID::from_str(
+            "[assembly:/_PRO/Scenes/Missions/thefacility/vr_tutorial_pc_graduation.brick].pc_entitytype",
+        )?;
+        assert_eq!(
+            rid.uri(),
+            "[assembly:/_pro/scenes/missions/thefacility/vr_tutorial_pc_graduation.brick].entitytype"
+        );
+        assert_eq!(
+            rid.resource_path_with_platform("pc"),
+            "[assembly:/_pro/scenes/missions/thefacility/vr_tutorial_pc_graduation.brick].pc_entitytype"
+        );
+
+        let rid = ResourceID::from_str("[assembly:/templates/aspectdummy.aspect].ps5_entitytype")?;
+        assert_eq!(
+            rid.uri(),
+            "[assembly:/templates/aspectdummy.aspect].entitytype"
+        );
+        assert_eq!(
+            rid.resource_path_with_platform("ps5"),
+            "[assembly:/templates/aspectdummy.aspect].ps5_entitytype"
+        );
+
         Ok(())
     }
 
     #[test]
-    fn test_parameters() -> Result<(), ResourceIDError> {
+    fn test_parameters_and_derived_ids() -> Result<(), ResourceIDError> {
         let mut resource_id = ResourceID::from_str(
-            "[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx",
+            "[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].pc_fx",
         )?;
+        assert_eq!(
+            resource_id.uri(),
+            "[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx"
+        );
+
         resource_id.add_parameter("lmao");
-        assert_eq!(resource_id.resource_path(), "[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass](lmao).pc_fx");
+        assert_eq!(
+            resource_id.uri(),
+            "[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass](lmao).fx"
+        );
+        assert_eq!(
+            resource_id.resource_path_with_platform("pc"),
+            "[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass](lmao).pc_fx"
+        );
         assert_eq!(resource_id.parameters(), ["lmao".to_string()]);
 
         resource_id.add_parameter("lmao2");
-        assert_eq!(resource_id.resource_path(), "[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass](lmao,lmao2).pc_fx");
+        assert_eq!(
+            resource_id.uri(),
+            "[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass](lmao,lmao2).fx"
+        );
+        assert_eq!(
+            resource_id.resource_path_with_platform("pc"),
+            "[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass](lmao,lmao2).pc_fx"
+        );
+
+        let derived = resource_id.create_derived("dx11", "mate");
+        assert_eq!(
+            derived.uri(),
+            "[[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass](lmao,lmao2).fx](dx11).mate"
+        );
+        assert_eq!(
+            derived.resource_path_with_platform("pc"),
+            "[[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass](lmao,lmao2).fx](dx11).pc_mate"
+        );
+
         Ok(())
     }
 
@@ -301,48 +400,86 @@ mod tests {
         )?;
         let inner_path = resource_id.inner_most_resource_path();
         assert_eq!(
-            inner_path.resource_path(),
+            inner_path.resource_path_with_platform("pc"),
             "[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].pc_fx"
         );
 
-        let resource_id = ResourceID::from_str("[[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx](dx11).mate")?;
+        let resource_id = ResourceID::from_str(
+            "[[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx](dx11).mate",
+        )?;
         let inner_path = resource_id.inner_most_resource_path();
         assert_eq!(
-            inner_path.resource_path(),
+            inner_path.resource_path_with_platform("pc"),
             "[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].pc_fx"
         );
 
-        let resource_id = ResourceID::from_str("[[[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx](dx11).mate](dx12).pc_mate")?;
-        let inner_path = resource_id.inner_most_resource_path();
+        let resource_id = ResourceID::from_str(
+            "[[[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx](dx11).mate](dx12).pc_mate",
+        )?;
+        let inner_most = resource_id.inner_most_resource_path();
+        let inner = resource_id.inner_resource_path();
+
         assert_eq!(
-            inner_path.resource_path(),
+            inner_most.resource_path_with_platform("pc"),
             "[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].pc_fx"
+        );
+        assert_eq!(
+            inner.resource_path_with_platform("pc"),
+            "[[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx](dx11).pc_mate"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_rrid_generation_is_agnostic_until_platform_is_explicit() -> Result<(), ResourceIDError>
+    {
+        let pc = ResourceID::from_str("[assembly:/templates/aspectdummy.aspect].pc_entitytype")?;
+        let ps5 = ResourceID::from_str("[assembly:/templates/aspectdummy.aspect].ps5_entitytype")?;
+        let ounce =
+            ResourceID::from_str("[assembly:/templates/aspectdummy.aspect].ounce_entitytype")?;
+        let plain = ResourceID::from_str("[assembly:/templates/aspectdummy.aspect].entitytype")?;
+
+        assert_eq!(
+            pc.uri(),
+            "[assembly:/templates/aspectdummy.aspect].entitytype"
+        );
+        assert_eq!(
+            ps5.uri(),
+            "[assembly:/templates/aspectdummy.aspect].entitytype"
+        );
+        assert_eq!(
+            ounce.uri(),
+            "[assembly:/templates/aspectdummy.aspect].entitytype"
+        );
+        assert_eq!(
+            plain.uri(),
+            "[assembly:/templates/aspectdummy.aspect].entitytype"
+        );
+
+        assert_eq!(pc.clone().into_rrid(), ps5.clone().into_rrid());
+        assert_eq!(ps5.clone().into_rrid(), ounce.clone().into_rrid());
+        assert_eq!(ounce.clone().into_rrid(), plain.clone().into_rrid());
+
+        assert_ne!(
+            plain.clone().into_rrid_with_platform("", PlatformTag::Pc),
+            plain.clone().into_rrid_with_platform("", PlatformTag::Ps5)
+        );
+        assert_ne!(
+            plain.clone().into_rrid_with_platform("", PlatformTag::Ps5),
+            plain.clone().into_rrid_with_platform("", PlatformTag::Ounce)
+        );
+        assert_ne!(
+            plain.clone().into_rrid(),
+            plain.into_rrid_with_platform("", PlatformTag::Pc)
         );
 
         Ok(())
     }
 
     #[test]
-    fn text_get_inner_resource_path() -> Result<(), ResourceIDError> {
-        let resource_id = ResourceID::from_str(
-            "[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx",
-        )?;
-        let inner_path = resource_id.inner_resource_path();
-        assert_eq!(
-            inner_path.resource_path(),
-            "[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].pc_fx"
-        );
-
-        let resource_id = ResourceID::from_str("[[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx](dx11).mate")?;
-        let inner_path = resource_id.inner_resource_path();
-        assert_eq!(
-            inner_path.resource_path(),
-            "[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].pc_fx"
-        );
-
-        let resource_id = ResourceID::from_str("[[[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx](dx11).mate](dx12).pc_mate")?;
-        let inner_path = resource_id.inner_resource_path();
-        assert_eq!(inner_path.resource_path(), "[[assembly:/_pro/_test/usern/materialclasses/ball_of_water_b.materialclass].fx](dx11).pc_mate");
-        Ok(())
+    fn test_invalid_inputs() {
+        assert!(ResourceID::from_str("not a resource id").is_err());
+        assert!(ResourceID::from_str("unknown").is_err());
+        assert!(ResourceID::from_str("[assembly:/foo/bar].*").is_err());
     }
 }
