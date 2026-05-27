@@ -19,6 +19,7 @@ use crate::{utils, WoaVersion};
 pub mod h2016_parser;
 pub mod hm2_parser;
 pub mod hm3_parser;
+pub mod bond_parser;
 
 const RESOURCE_PATH_REGEX: &Lazy<Regex> = regex!(r"(\[[A-z]+:/.+?]).([A-z]+)");
 

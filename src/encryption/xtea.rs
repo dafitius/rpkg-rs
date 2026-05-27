@@ -25,32 +25,54 @@ pub struct Xtea;
 
 impl Xtea {
     /// Default XTEA key, used in thumbs.dat and packagedefinition.txt
+    #[deprecated(
+        since = "1.4.0",
+        note = "Why are you using this directly? Please keep a local copy, as this const will be private in the next release"
+    )]
     pub const DEFAULT_KEY: [u32; 4] = [0x30f95282, 0x1f48c419, 0x295f8548, 0x2a78366d];
 
+    const WOA_KEY: [u32; 4] = [0x30f95282, 0x1f48c419, 0x295f8548, 0x2a78366d];
+    const BOND_KEY: [u32; 4] = [0x71482CF0, 0x5FDC4B9F, 0x86CE569D, 0x509FC1E];
+
     /// LOCR/TEXTLIST XTEA key, used for localization
+    #[deprecated(
+        since = "1.4.0",
+        note = "LOCR_KEY is now ambiguous, please sure either WOA_L10N_KEY or BOND_L10N_KEY"
+    )]
     pub const LOCR_KEY: [u32; 4] = [0x53527737, 0x7506499E, 0xBD39AEE3, 0xA59E7268];
 
+    pub const WOA_L10N_KEY: [u32; 4] = [0x53527737, 0x7506499E, 0xBD39AEE3, 0xA59E7268];
+
+    pub const BOND_L10N_KEY: [u32; 4] = [0x68AC3361, 0x562B4AA0, 0xB9F2771F, 0x28EB3CE7];
+
+
     /// Default header for encrypted files.
-    const DEFAULT_ENCRYPTED_HEADER: [u8; 0x10] = [
+    const WOA_ENCRYPTED_HEADER: [u8; 0x10] = [
         0x22, 0x3d, 0x6f, 0x9a, 0xb3, 0xf8, 0xfe, 0xb6, 0x61, 0xd9, 0xcc, 0x1c, 0x62, 0xde, 0x83,
         0x41,
+    ];
+
+    const BOND_ENCRYPTED_HEADER: [u8; 0x10] = [
+        0xB7, 0xE2, 0xEA, 0x00, 0x54, 0x5B, 0x6B, 0x87, 0x11, 0xBD, 0x6F, 0xE8, 0x4D, 0x6A, 0xD4,
+        0xBF,
     ];
 
     /// Checks if a given buffer represents an encrypted text file.
     /// This function will check for the presence of a default header in the text file.
     pub fn is_encrypted_text_file(input_buffer: &[u8]) -> bool {
-        input_buffer.starts_with(&Self::DEFAULT_ENCRYPTED_HEADER)
+        input_buffer.starts_with(&Self::WOA_ENCRYPTED_HEADER) ||
+            input_buffer.starts_with(&Self::BOND_ENCRYPTED_HEADER)
     }
 
     /// Decrypts a text file given its buffer, uses the default xtea key.
     pub fn decrypt_text_file(input_buffer: &[u8]) -> Result<String, XteaError> {
-        let payload_start = Self::DEFAULT_ENCRYPTED_HEADER.len() + 4;
+        let payload_start = Self::WOA_ENCRYPTED_HEADER.len() + 4;
 
         if input_buffer.len() < payload_start {
             return Err(InvalidInput("Input too short".to_string()));
         }
 
-        if !input_buffer.starts_with(&Self::DEFAULT_ENCRYPTED_HEADER) {
+        if !Self::is_encrypted_text_file(input_buffer) {
             return Err(InvalidInput("Header mismatch".to_string()));
         }
         let checksum = &input_buffer[payload_start - 4..payload_start];
@@ -62,7 +84,12 @@ impl Xtea {
             ));
         }
 
-        let xtea = XTEA::new(&Self::DEFAULT_KEY);
+        let mut key = Self::WOA_KEY;
+        if input_buffer.starts_with(&Self::BOND_ENCRYPTED_HEADER){
+            key = Self::BOND_KEY
+        }
+
+        let xtea = XTEA::new(&key);
         let mut out_buffer = vec![0u8; input.len()];
 
         let mut input_reader = Cursor::new(input);
@@ -104,7 +131,23 @@ impl Xtea {
         String::from_utf8(ouput_writer.get_mut().to_owned()).map_err(XteaError::TextEncodingError)
     }
 
+    #[deprecated(
+        since = "1.4.0",
+        note = "encrypt_text_file is only able to encrypt for Woa, please move to either encrypt_woa_text_file or encrypt_bond_text_file"
+    )]
     pub fn encrypt_text_file(input_string: String) -> Result<Vec<u8>, XteaError> {
+        Self::encrypt_text_file_internal(input_string, Self::WOA_KEY, Self::WOA_ENCRYPTED_HEADER)
+    }
+
+    pub fn encrypt_woa_text_file(input_string: String) -> Result<Vec<u8>, XteaError> {
+        Self::encrypt_text_file_internal(input_string, Self::WOA_KEY, Self::WOA_ENCRYPTED_HEADER)
+    }
+
+    pub fn encrypt_bond_text_file(input_string: String) -> Result<Vec<u8>, XteaError> {
+        Self::encrypt_text_file_internal(input_string, Self::BOND_KEY, Self::BOND_ENCRYPTED_HEADER)
+    }
+
+    fn encrypt_text_file_internal(input_string: String, key: [u32; 4], header: [u8; 0x10]) -> Result<Vec<u8>, XteaError> {
         //get the input buffer and trim any trailing zeros
         let mut input_buffer = input_string.trim_end_matches('\0').as_bytes().to_vec();
         let checksum = crc32fast::hash(&input_buffer);
@@ -114,7 +157,7 @@ impl Xtea {
             input_buffer.extend(vec![0u8; padding]);
         }
         let mut out_buffer = vec![0u8; input_buffer.len()];
-        let xtea = XTEA::new(&Self::DEFAULT_KEY);
+        let xtea = XTEA::new(&key);
 
         let mut input_reader = Cursor::new(&input_buffer);
         let mut output_writer = Cursor::new(&mut out_buffer);
@@ -123,7 +166,7 @@ impl Xtea {
             .map_err(XteaError::CipherError)?;
 
         let mut final_buffer = Vec::new();
-        final_buffer.extend_from_slice(&Self::DEFAULT_ENCRYPTED_HEADER);
+        final_buffer.extend_from_slice(&header);
 
         final_buffer
             .write_u32::<LittleEndian>(checksum)
