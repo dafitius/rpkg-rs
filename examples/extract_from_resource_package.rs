@@ -2,7 +2,7 @@ use clap::{Arg, Command};
 use rpkg_rs::misc::resource_id::ResourceID;
 use rpkg_rs::resource::legacy::Format;
 use rpkg_rs::resource::resource_package::ResourcePackage;
-use rpkg_rs::resource::runtime_resource_id::RuntimeResourceID;
+use rpkg_rs::resource::runtime_resource_id::{PlatformTag, RuntimeResourceID};
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -38,7 +38,7 @@ fn main() {
         std::process::exit(1)
     });
 
-    let rrid: RuntimeResourceID = RuntimeResourceID::from_resource_id(&rid);
+    let rrid: RuntimeResourceID = RuntimeResourceID::from_resource_id_with_platform(&rid, "pc", PlatformTag::None);
 
     println!("Parsing the resource package at {}", package_path.display());
     let rpkg = if !legacy {

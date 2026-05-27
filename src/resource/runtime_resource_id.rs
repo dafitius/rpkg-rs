@@ -215,7 +215,7 @@ mod tests {
 
         let rid = ResourceID::from_str("[assembly:/_test/lib.a?/test_image.png].pc_webp").unwrap();
         assert_eq!(
-            RuntimeResourceID::from_resource_id(&rid),
+            RuntimeResourceID::from_resource_id_with_platform(&rid, "pc", PlatformTag::None),
             0x00290D5B143172A3
         );
         assert_eq!(RuntimeResourceID::from(rid), 0x00290D5B143172A3);

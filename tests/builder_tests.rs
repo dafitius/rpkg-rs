@@ -4,7 +4,7 @@ use rpkg_rs::resource::resource_package::{
     ChunkType, PackageVersion, ResourcePackage, ResourceReferenceFlags, ResourceReferenceFlagsLegacy,
     ResourceReferenceFlagsStandard,
 };
-use rpkg_rs::resource::runtime_resource_id::RuntimeResourceID;
+use rpkg_rs::resource::runtime_resource_id::{PlatformTag, RuntimeResourceID};
 use std::str::FromStr;
 use rpkg_rs::resource::resource_partition::PatchId;
 
@@ -18,21 +18,21 @@ fn test_package_with_resource(
     let resource_id = ResourceID::from_str("[assembly:/res1.brick].pc_entitytype")?;
 
     let unneeded_resource_ids = vec![
-        RuntimeResourceID::from_resource_id(&ResourceID::from_str(
+        RuntimeResourceID::from_resource_id_with_platform(&ResourceID::from_str(
             "[assembly:/res2.brick].pc_entitytype",
-        )?),
-        RuntimeResourceID::from_resource_id(&ResourceID::from_str(
+        )?, "pc", PlatformTag::None),
+        RuntimeResourceID::from_resource_id_with_platform(&ResourceID::from_str(
             "[assembly:/res3.brick].pc_entitytype",
-        )?),
+        )?, "pc", PlatformTag::None),
     ];
 
     let references = vec![
-        RuntimeResourceID::from_resource_id(&ResourceID::from_str(
+        RuntimeResourceID::from_resource_id_with_platform(&ResourceID::from_str(
             "[assembly:/ref1.brick].pc_entitytype",
-        )?),
-        RuntimeResourceID::from_resource_id(&ResourceID::from_str(
+        )?, "pc", PlatformTag::None),
+        RuntimeResourceID::from_resource_id_with_platform(&ResourceID::from_str(
             "[assembly:/ref2.brick].pc_entitytype",
-        )?),
+        )?, "pc", PlatformTag::None),
     ];
 
     let resource_reference_flags = if legacy_references {
@@ -49,7 +49,7 @@ fn test_package_with_resource(
     let mut builder = PackageBuilder::new(69, ChunkType::Standard);
 
     // Create a fake resource id and data for the resource.
-    let rrid: RuntimeResourceID = RuntimeResourceID::from_resource_id(&resource_id);
+    let rrid: RuntimeResourceID = RuntimeResourceID::from_resource_id_with_platform(&resource_id, "pc", PlatformTag::None);
     let fake_data: Vec<u8> = (0..1024).map(|j| j as u8).collect();
 
     // Create a resource from memory and add it to the package.

@@ -4,7 +4,7 @@ const TEST_STRING: &str = "Lorem ipsum dolor sit amet consectetur adipisicing el
 
 #[test]
 fn test_xtea_text_encoding() -> Result<(), Box<dyn std::error::Error>> {
-    let encrypted = Xtea::encrypt_text_file(TEST_STRING.to_string())?;
+    let encrypted = Xtea::encrypt_woa_text_file(TEST_STRING.to_string())?;
     let decrypted = Xtea::decrypt_text_file(encrypted.as_slice())?;
 
     assert_eq!(TEST_STRING, decrypted);
@@ -12,19 +12,16 @@ fn test_xtea_text_encoding() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
-fn test_xtea_string_encoding_default() -> Result<(), Box<dyn std::error::Error>> {
-    let encrypted = Xtea::encrypt_string(TEST_STRING.to_string(), &Xtea::DEFAULT_KEY)?;
-    let decrypted = Xtea::decrypt_string(encrypted.as_slice(), &Xtea::DEFAULT_KEY)?;
-
-    assert_eq!(TEST_STRING, decrypted);
-    Ok(())
-}
-
-#[test]
 fn test_xtea_string_encoding_locr() -> Result<(), Box<dyn std::error::Error>> {
-    let encrypted = Xtea::encrypt_string(TEST_STRING.to_string(), &Xtea::LOCR_KEY)?;
-    let decrypted = Xtea::decrypt_string(encrypted.as_slice(), &Xtea::LOCR_KEY)?;
+    let encrypted = Xtea::encrypt_string(TEST_STRING.to_string(), &Xtea::WOA_L10N_KEY)?;
+    let decrypted = Xtea::decrypt_string(encrypted.as_slice(), &Xtea::WOA_L10N_KEY)?;
 
     assert_eq!(TEST_STRING, decrypted);
+
+    let encrypted = Xtea::encrypt_string(TEST_STRING.to_string(), &Xtea::BOND_L10N_KEY)?;
+    let decrypted = Xtea::decrypt_string(encrypted.as_slice(), &Xtea::BOND_L10N_KEY)?;
+
+    assert_eq!(TEST_STRING, decrypted);
+
     Ok(())
 }

@@ -456,10 +456,6 @@ mod tests {
             "[assembly:/templates/aspectdummy.aspect].entitytype"
         );
 
-        assert_eq!(pc.clone().into_rrid(), ps5.clone().into_rrid());
-        assert_eq!(ps5.clone().into_rrid(), ounce.clone().into_rrid());
-        assert_eq!(ounce.clone().into_rrid(), plain.clone().into_rrid());
-
         assert_ne!(
             plain.clone().into_rrid_with_platform("", PlatformTag::Pc),
             plain.clone().into_rrid_with_platform("", PlatformTag::Ps5)
@@ -467,10 +463,6 @@ mod tests {
         assert_ne!(
             plain.clone().into_rrid_with_platform("", PlatformTag::Ps5),
             plain.clone().into_rrid_with_platform("", PlatformTag::Ounce)
-        );
-        assert_ne!(
-            plain.clone().into_rrid(),
-            plain.into_rrid_with_platform("", PlatformTag::Pc)
         );
 
         Ok(())

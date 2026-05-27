@@ -9,7 +9,7 @@ use rpkg_rs::resource::partition_manager::{PartitionManager, PartitionState};
 use rpkg_rs::resource::pdefs::{GamePaths, PackageDefinitionSource};
 use rpkg_rs::resource::resource_info::ResourceInfo;
 use rpkg_rs::resource::resource_partition::PatchId;
-use rpkg_rs::resource::runtime_resource_id::RuntimeResourceID;
+use rpkg_rs::resource::runtime_resource_id::{PlatformTag, RuntimeResourceID};
 use rpkg_rs::WoaVersion;
 
 fn main() {
@@ -117,7 +117,7 @@ fn main() {
             std::process::exit(0)
         });
 
-        let rrid = RuntimeResourceID::from_resource_id(&rid);
+        let rrid = RuntimeResourceID::from_resource_id_with_platform(&rid, "pc", PlatformTag::None);
         println!("Try to find {}", rrid);
         println!("Resource: {rrid}");
 
