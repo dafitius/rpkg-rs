@@ -7,7 +7,7 @@ use itertools::Itertools;
 use lzzzz::lz4;
 use memmap2::Mmap;
 use std::fs::File;
-use std::io::{Cursor, Read, Seek};
+use std::io::{Cursor, Read, Seek, SeekFrom};
 use std::iter::zip;
 use std::path::{Path, PathBuf};
 use std::{fmt, io};
@@ -87,9 +87,17 @@ fn resource_parser(file_count: u32) -> BinResult<IndexMap<RuntimeResourceID, Res
         resource_entries.push(PackageOffsetInfo::read_options(reader, endian, ())?);
     }
 
+    let position = reader.stream_position()?;
+    let has_states_size = !(0..file_count).any(|_|{
+        if let Ok(probe) = ResourceHeaderProbe::read_options(reader, endian, ()){
+            probe.states_chunk_size != 0 || (!probe.resource_type.is_ascii())
+        } else { true }
+    });
+
+    reader.seek(SeekFrom::Start(position))?;
     let mut resource_metadata = vec![];
     for _ in 0..file_count {
-        resource_metadata.push(ResourceHeader::read_options(reader, endian, ())?);
+        resource_metadata.push(ResourceHeader::read_options(reader, endian, (has_states_size,))?);
     }
 
     let resources = zip(resource_entries, resource_metadata)
@@ -316,10 +324,14 @@ impl PackageOffsetInfo {
 #[derive(Clone, PartialEq, Eq)]
 #[binrw]
 #[brw(little)]
+#[br(import(has_states_size: bool))]
 pub struct ResourceHeader {
     pub(crate) resource_type: [u8; 4],
     pub(crate) references_chunk_size: u32,
+    #[br(calc=0)]
     pub(crate) states_chunk_size: u32,
+
+    #[br(pad_before(if has_states_size {4} else {0}))]
     pub(crate) data_size: u32,
     pub(crate) system_memory_requirement: u32,
     pub(crate) video_memory_requirement: u32,
@@ -327,6 +339,15 @@ pub struct ResourceHeader {
     #[br(if (references_chunk_size > 0), parse_with = read_references)]
     #[bw(write_with = empty_writer)]
     pub references: Vec<(RuntimeResourceID, ResourceReferenceFlags)>,
+}
+
+#[allow(dead_code)]
+#[derive(Default, Clone, PartialEq, Eq, BinRead)]
+struct ResourceHeaderProbe {
+    pub(crate) resource_type: [u8; 4],
+    references_chunk_size: u32,
+    #[br(pad_after(references_chunk_size + 12))]
+    pub(crate) states_chunk_size: u32,
 }
 
 #[bitfield(u8)]

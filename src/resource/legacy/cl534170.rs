@@ -35,7 +35,7 @@ fn resource_parser(file_count: u32) -> BinResult<IndexMap<RuntimeResourceID, Res
 
     let mut resource_metadata = vec![];
     for _ in 0..file_count {
-        resource_metadata.push(ResourceHeader::read_options(reader, endian, ())?);
+        resource_metadata.push(ResourceHeader::read_options(reader, endian, (true,))?);
     }
 
     let resources = zip(resource_entries, resource_metadata)

@@ -21,6 +21,27 @@ pub mod misc;
 pub mod resource;
 pub(crate) mod utils;
 
+
+#[non_exhaustive]
+#[derive(Debug, PartialEq, Clone, Copy)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum GlacierGame {
+    HM2016,
+    HM2,
+    HM3,
+    Bond,
+}
+
+impl From<WoaVersion> for GlacierGame {
+    fn from(version: WoaVersion) -> Self {
+        match version {
+            WoaVersion::HM2016 => GlacierGame::HM2016,
+            WoaVersion::HM2 => GlacierGame::HM2,
+            WoaVersion::HM3 => GlacierGame::HM3,
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Clone, Copy)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub enum WoaVersion {
