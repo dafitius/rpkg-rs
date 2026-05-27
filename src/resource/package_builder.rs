@@ -21,6 +21,7 @@ use binrw::meta::WriteEndian;
 use indexmap::{IndexMap, IndexSet};
 use lzzzz::{lz4, lz4_hc};
 use thiserror::Error;
+use crate::resource::resource_info::ResourceInfo;
 
 /// `PackageResourceBlob` is an enum representing various types of package resource stores, which can
 /// include files, file sections, and memory buffers, optionally compressed or scrambled.
@@ -277,7 +278,49 @@ impl PackageResourceBuilder {
         })
     }
 
-    /// Create a new resource builder from a a GlacierResource.
+    /// Create a new resource builder from a `ResourceInfo` struct.
+    ///
+    /// This is similar to `from_compressed_memory`, but it expects the data to be uncompressed and
+    /// can optionally compress and scramble it.
+    ///
+    /// # Arguments
+    /// * `resource_info` - The resource info of the resource.
+    /// * `data` - The data of the resource.
+    /// * `is_packaged_data` - Should be enabled when the data is packaged (compressed and/or scrambled)
+    pub fn from_resource_info(
+        resource_info: ResourceInfo,
+        data: Vec<u8>,
+        is_packaged_data: bool,
+    ) -> Result<Self, PackageResourceBuilderError> {
+        if data.len() > u32::MAX as usize {
+            return Err(PackageResourceBuilderError::FileTooLarge);
+        }
+
+        let blob = if is_packaged_data {
+            PackageResourceBlob::CompressedMemory {
+                data,
+                decompressed_size: Some(resource_info.size()),
+                is_scrambled: resource_info.is_scrambled(),
+            }
+        } else {
+            PackageResourceBlob::Memory {
+                data,
+                compression_level: if resource_info.is_compressed() {Some(12)} else {None},
+                should_scramble: resource_info.is_scrambled(),
+            }
+        };
+
+        Ok(Self {
+            rrid: resource_info.entry.runtime_resource_id,
+            resource_type: resource_info.header.resource_type,
+            system_memory_requirement: resource_info.header.system_memory_requirement,
+            video_memory_requirement: resource_info.header.video_memory_requirement,
+            references: resource_info.references().to_vec(),
+            blob,
+        })
+    }
+
+    /// Create a new resource builder from a GlacierResource.
     ///
     /// # Arguments
     /// * `rrid` - The resource ID of the resource.
