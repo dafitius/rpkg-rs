@@ -1,8 +1,9 @@
-use crate::encryption::xtea::Xtea;
 use crate::misc::resource_id::ResourceID;
 use crate::resource::pdefs::{
-    PackageDefinitionError, PackageDefinitionParser, PartitionId, PartitionInfo, PartitionType, RESOURCE_PATH_REGEX,
+    PackageDefinitionError, PackageDefinitionParser, PartitionId, PartitionInfo, PartitionType,
+    RESOURCE_PATH_REGEX,
 };
+use glacier_base::encryption::xtea::XteaConfig;
 use lazy_regex::regex;
 use std::str::FromStr;
 
@@ -10,13 +11,7 @@ pub struct H2016Parser;
 
 impl PackageDefinitionParser for H2016Parser {
     fn parse(data: &[u8]) -> Result<Vec<PartitionInfo>, PackageDefinitionError> {
-        let deciphered_data = match Xtea::is_encrypted_text_file(data) {
-            true => Xtea::decrypt_text_file(data)?,
-            false => match String::from_utf8(data.to_vec()) {
-                Ok(v) => v,
-                Err(e) => return Err(PackageDefinitionError::TextEncodingError(e)),
-            },
-        };
+        let deciphered_data = Self::decrypt_pdefs_to_str(data, XteaConfig::Woa)?;
 
         let mut partitions: Vec<PartitionInfo> = Vec::new();
         let mut previous_lines: [&str; 2] = ["", ""];

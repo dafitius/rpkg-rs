@@ -1,25 +1,35 @@
-use std::path::Path;
 use crate::resource::resource_package::{ResourcePackage, ResourcePackageError};
+use serde::{Deserialize, Serialize};
+use std::path::Path;
 
 mod cl534170;
 
-pub enum Format {
+#[non_exhaustive]
+#[derive(Debug, PartialEq, Clone, Copy)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
+pub enum LegacyGame {
     CL482338, //19-01-2015
     CL534170, //14-07-2015
     CL535848, //15-07-2015
 }
 
-pub fn read_package_from_file<P: AsRef<Path> >(format: Format, path: P) -> Result<ResourcePackage, ResourcePackageError>{
-    match format{
-        Format::CL482338 | Format::CL534170 | Format::CL535848 => {
+pub fn read_package_from_file<P: AsRef<Path>>(
+    format: LegacyGame,
+    path: P,
+) -> Result<ResourcePackage, ResourcePackageError> {
+    match format {
+        LegacyGame::CL482338 | LegacyGame::CL534170 | LegacyGame::CL535848 => {
             cl534170::ResourcePackage::from_file(&path).map(|res| res.into())
         }
     }
 }
 
-pub fn read_package_from_memory(format: Format, memory: Vec<u8>) -> Result<ResourcePackage, ResourcePackageError>{
-    match format{
-        Format::CL482338 | Format::CL534170 | Format::CL535848 => {
+pub fn read_package_from_memory(
+    format: LegacyGame,
+    memory: Vec<u8>,
+) -> Result<ResourcePackage, ResourcePackageError> {
+    match format {
+        LegacyGame::CL482338 | LegacyGame::CL534170 | LegacyGame::CL535848 => {
             cl534170::ResourcePackage::from_memory(memory).map(|res| res.into())
         }
     }

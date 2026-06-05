@@ -1,11 +1,10 @@
-use rayon::iter::ParallelIterator;
+use itertools::Itertools;
 use rayon::iter::IndexedParallelIterator;
+use rayon::iter::ParallelIterator;
+use rayon::prelude::IntoParallelRefIterator;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use itertools::Itertools;
-use rayon::prelude::IntoParallelRefIterator;
 use thiserror::Error;
-use crate::resource::partition_manager::PartitionManagerError::PartitionNotFound;
 
 use crate::resource::pdefs::{
     GameDiscoveryError, GamePaths, PackageDefinitionError, PackageDefinitionSource, PartitionId,
@@ -13,9 +12,9 @@ use crate::resource::pdefs::{
 };
 use crate::resource::resource_info::ResourceInfo;
 use crate::resource::runtime_resource_id::RuntimeResourceID;
-use crate::WoaVersion;
+use crate::GlacierGame;
 
-use super::resource_partition::{PatchId, ResourcePartition, ResourcePartitionError};
+use super::resource_partition::{ResourcePartition, ResourcePartitionError};
 
 #[derive(Debug, Error)]
 pub enum PartitionManagerError {
@@ -27,16 +26,16 @@ pub enum PartitionManagerError {
 
     #[error("partition {0} could not be found")]
     PartitionNotFound(String),
-    
+
     #[error("resource {0} could not be found")]
     ResourceNotFound(String),
 
     #[error("Could not discover game paths: {0}")]
     GameDiscoveryError(#[from] GameDiscoveryError),
-    
+
     #[error("Could not locate runtime directory: {0}")]
     RuntimeDirectoryNotFound(PathBuf),
-    
+
     #[error("Could not find a root partition")]
     NoRootPartition(),
 }
@@ -51,6 +50,7 @@ pub struct PartitionState {
 
 pub struct PartitionManager {
     runtime_directory: PathBuf,
+    game_version: GlacierGame,
     partition_infos: Vec<PartitionInfo>, //All potential partitions which could be mounted with this manager
     pub partitions: Vec<ResourcePartition>, //All mounted partitions
 }
@@ -59,23 +59,28 @@ pub struct PartitionManager {
 pub trait PartitionManagerPar {
     fn from_game_par(
         retail_directory: PathBuf,
-        game_version: WoaVersion,
+        game_version: GlacierGame,
         mount: bool,
-    ) -> Result<Self, PartitionManagerError> where Self: Sized;
+    ) -> Result<Self, PartitionManagerError>
+    where
+        Self: Sized;
 
     fn from_game_with_callback_par<F>(
         retail_directory: PathBuf,
-        game_version: WoaVersion,
+        game_version: GlacierGame,
         mount: bool,
         progress_callback: F,
     ) -> Result<Self, PartitionManagerError>
     where
-        F: FnMut(usize, &PartitionState) + Send + Sync, Self: Sized;
+        F: Fn(usize, &PartitionState) + Send + Sync,
+        Self: Sized;
 
-    fn mount_partitions_par<F>(&mut self, progress_callback: F) -> Result<(), PartitionManagerError>
+    fn mount_partitions_par<F>(
+        &mut self,
+        progress_callback: F,
+    ) -> Result<(), PartitionManagerError>
     where
-        F: FnMut(usize, &PartitionState) + Send + Sync;
-
+        F: Fn(usize, &PartitionState) + Send + Sync;
 }
 
 impl PartitionManager {
@@ -86,13 +91,15 @@ impl PartitionManager {
     /// - `package_definition` - The package definition to use.
     pub fn new(
         runtime_directory: PathBuf,
+        game_version: GlacierGame,
         package_definition: &PackageDefinitionSource,
     ) -> Result<Self, PartitionManagerError> {
-        
         if !runtime_directory.exists() {
-            return Err(PartitionManagerError::RuntimeDirectoryNotFound(runtime_directory));
+            return Err(PartitionManagerError::RuntimeDirectoryNotFound(
+                runtime_directory,
+            ));
         }
-        
+
         let partition_infos = package_definition
             .read()
             .map_err(PartitionManagerError::PackageDefinitionError)?;
@@ -100,6 +107,7 @@ impl PartitionManager {
         Ok(Self {
             runtime_directory,
             partition_infos,
+            game_version,
             partitions: vec![],
         })
     }
@@ -112,7 +120,7 @@ impl PartitionManager {
     /// - `mount` - Indicates whether to automatically mount the partitions, can eliminate the need to call `mount_partitions` separately
     pub fn from_game(
         retail_directory: PathBuf,
-        game_version: WoaVersion,
+        game_version: GlacierGame,
         mount: bool,
     ) -> Result<Self, PartitionManagerError> {
         Self::from_game_with_callback(retail_directory, game_version, mount, |_, _| {})
@@ -127,14 +135,14 @@ impl PartitionManager {
     /// - `progress_callback` - A callback function that will be called with the current mounting progress.
     pub fn from_game_with_callback<F>(
         retail_directory: PathBuf,
-        game_version: WoaVersion,
+        game_version: GlacierGame,
         mount: bool,
         progress_callback: F,
     ) -> Result<Self, PartitionManagerError>
     where
-        F: FnMut(usize, &PartitionState),
+        F: Fn(usize, &PartitionState),
     {
-        let game_paths = GamePaths::from_retail_directory(retail_directory)?;
+        let game_paths = GamePaths::from_retail_directory(retail_directory, game_version.into())?;
         let package_definition =
             PackageDefinitionSource::from_file(game_paths.package_definition_path, game_version)?;
 
@@ -146,6 +154,7 @@ impl PartitionManager {
         let mut package_manager = Self {
             runtime_directory: game_paths.runtime_path,
             partition_infos,
+            game_version,
             partitions: vec![],
         };
 
@@ -160,12 +169,13 @@ impl PartitionManager {
     fn try_read_partition<F>(
         runtime_directory: &Path,
         partition_info: PartitionInfo,
-        mut progress_callback: F,
+        glacier_game: GlacierGame,
+        progress_callback: F,
     ) -> Result<Option<ResourcePartition>, PartitionManagerError>
     where
-        F: FnMut(&PartitionState),
+        F: Fn(&PartitionState),
     {
-        let mut partition = ResourcePartition::new(partition_info.clone());
+        let mut partition = ResourcePartition::new(partition_info.clone(), glacier_game);
         let mut state_result: PartitionState = PartitionState {
             installing: false,
             mounted: false,
@@ -192,12 +202,9 @@ impl PartitionManager {
     ///
     /// # Arguments
     /// - `progress_callback` - A callback function that will be called with the current mounting progress.
-    pub fn mount_partitions<F>(
-        &mut self,
-        mut progress_callback: F,
-    ) -> Result<(), PartitionManagerError>
+    pub fn mount_partitions<F>(&mut self, progress_callback: F) -> Result<(), PartitionManagerError>
     where
-        F: FnMut(usize, &PartitionState),
+        F: Fn(usize, &PartitionState),
     {
         let partitions = self
             .partition_infos
@@ -208,7 +215,12 @@ impl PartitionManager {
                     progress_callback(index + 1, state);
                 };
 
-                Self::try_read_partition(&self.runtime_directory, partition_info.clone(), callback)
+                Self::try_read_partition(
+                    &self.runtime_directory,
+                    partition_info.clone(),
+                    self.game_version,
+                    callback,
+                )
             })
             .collect::<Result<Vec<Option<ResourcePartition>>, PartitionManagerError>>()?
             .into_iter()
@@ -233,11 +245,14 @@ impl PartitionManager {
         progress_callback: F,
     ) -> Result<(), PartitionManagerError>
     where
-        F: FnMut(&PartitionState),
+        F: Fn(&PartitionState),
     {
-        if let Some(partition) =
-            Self::try_read_partition(&self.runtime_directory, partition_info, progress_callback)?
-        {
+        if let Some(partition) = Self::try_read_partition(
+            &self.runtime_directory,
+            partition_info,
+            self.game_version,
+            progress_callback,
+        )? {
             self.partitions.push(partition)
         }
 
@@ -271,26 +286,28 @@ impl PartitionManager {
             .iter()
             .find(|partition| partition.partition_info().id == partition_id)
     }
-    
-    pub fn root_partition(
-        &self
-    ) -> Result<PartitionId, PartitionManagerError> {
-        if let Some(mut partition) = self.partition_infos.first(){
+
+    pub fn root_partition(&self) -> Result<PartitionId, PartitionManagerError> {
+        if let Some(mut partition) = self.partition_infos.first() {
             loop {
-                match &partition.parent{
+                match &partition.parent {
                     Some(parent) => {
-                        match self.find_partition(parent.clone()){
-                            Some(part) => {partition = part.partition_info()}
-                            None => {return Err(PartitionNotFound(parent.to_string()))}
+                        match self.find_partition(parent.clone()) {
+                            Some(part) => partition = part.partition_info(),
+                            None => {
+                                return Err(PartitionManagerError::PartitionNotFound(
+                                    parent.to_string(),
+                                ))
+                            }
                         };
-                    },
+                    }
                     None => return Ok(partition.id.clone()),
                 }
             }
         }
         Err(PartitionManagerError::NoRootPartition())
     }
-    
+
     pub fn partitions_with_resource(&self, rrid: &RuntimeResourceID) -> Vec<PartitionId> {
         self.partitions
             .iter()
@@ -309,15 +326,15 @@ impl PartitionManager {
     /// # Returns
     /// An iterator yielding references to `RuntimeResourceID`.
     pub fn iter_all_runtime_resource_ids(&self) -> impl Iterator<Item = &RuntimeResourceID> + '_ {
-        self.partitions.iter().flat_map(|partition| {
-            partition.resources.keys()
-        })
+        self.partitions
+            .iter()
+            .flat_map(|partition| partition.resources.keys())
     }
-    
-    pub fn resource_mounted(&self, rrid: &RuntimeResourceID) -> bool{
+
+    pub fn resource_mounted(&self, rrid: &RuntimeResourceID) -> bool {
         self.iter_all_runtime_resource_ids().contains(rrid)
     }
-    
+
     pub fn resource_infos(&self, rrid: &RuntimeResourceID) -> Vec<(PartitionId, &ResourceInfo)> {
         self.partitions_with_resource(rrid)
             .into_iter()
@@ -344,7 +361,10 @@ impl PartitionManager {
         if let Some(partition) = partition {
             match partition.get_resource_info(rrid) {
                 Ok(info) => Ok(info),
-                Err(e) => Err(PartitionManagerError::PartitionError(partition_id.clone(), e)),
+                Err(e) => Err(PartitionManagerError::PartitionError(
+                    partition_id.clone(),
+                    e,
+                )),
             }
         } else {
             Err(PartitionManagerError::PartitionNotFound(
@@ -368,88 +388,24 @@ impl PartitionManager {
                 if partition.contains(resource_id) {
                     match partition.get_resource_info(resource_id) {
                         Ok(info) => Ok((info, partition_id.clone())),
-                        Err(_) => Err(PartitionManagerError::ResourceNotFound(resource_id.to_string())),
+                        Err(_) => Err(PartitionManagerError::ResourceNotFound(
+                            resource_id.to_string(),
+                        )),
                     }
                 } else {
                     match &partition.partition_info().parent {
-                        
                         Some(parent_id) => {
                             self.resolve_resource_from(parent_id.clone(), resource_id)
-                        },
-                        None => {
-                            Err(PartitionManagerError::ResourceNotFound(resource_id.to_string()))
                         }
-                    }
-                }
-            },
-            None => {
-                Err(PartitionNotFound(partition_id.to_string()))
-            }
-        }
-    }
-    #[deprecated(
-        since = "1.0.0",
-        note = "prefer direct access through the partitions field"
-    )]
-    pub fn partitions(&self) -> &Vec<ResourcePartition> {
-        &self.partitions
-    }
-
-    #[deprecated(
-        since = "1.1.0",
-        note = "please implement this yourself, it is out of scope for this struct"
-    )]
-    pub fn print_resource_changelog(&self, rrid: &RuntimeResourceID) {
-        println!("Resource: {rrid}");
-
-        for partition in &self.partitions {
-            let mut last_occurence: Option<&ResourceInfo> = None;
-
-            let size =
-                |info: &ResourceInfo| info.compressed_size().unwrap_or(info.header.data_size);
-
-            let changes = partition.resource_patch_indices(rrid);
-            let deletions = partition.resource_removal_indices(rrid);
-            let occurrences = changes
-                .clone()
-                .into_iter()
-                .chain(deletions.clone())
-                .collect::<Vec<PatchId>>();
-
-            for occurence in occurrences.iter().sorted() {
-                println!(
-                    "{}: {}",
-                    match occurence {
-                        PatchId::Base => {
-                            "Base"
-                        }
-                        PatchId::Patch(_) => {
-                            "Patch"
-                        }
-                    },
-                    partition.partition_info().filename(*occurence)
-                );
-
-                if deletions.contains(occurence) {
-                    println!("\t- Removal: resource deleted");
-                    last_occurence = None;
-                }
-
-                if changes.contains(occurence) {
-                    if let Ok(info) = partition.resource_info_from(rrid, *occurence) {
-                        if let Some(last_info) = last_occurence {
-                            println!(
-                                "\t- Modification: Size changed from {} to {}",
-                                size(last_info),
-                                size(info)
-                            );
-                        } else {
-                            println!("\t- Addition: New occurrence, Size {} bytes", size(info))
-                        }
-                        last_occurence = Some(info);
+                        None => Err(PartitionManagerError::ResourceNotFound(
+                            resource_id.to_string(),
+                        )),
                     }
                 }
             }
+            None => Err(PartitionManagerError::PartitionNotFound(
+                partition_id.to_string(),
+            )),
         }
     }
 }
@@ -464,7 +420,7 @@ impl PartitionManagerPar for PartitionManager {
     /// - `mount` - Indicates whether to automatically mount the partitions, can eliminate the need to call `mount_partitions_par` separately
     fn from_game_par(
         retail_directory: PathBuf,
-        game_version: WoaVersion,
+        game_version: GlacierGame,
         mount: bool,
     ) -> Result<Self, PartitionManagerError> {
         Self::from_game_with_callback_par(retail_directory, game_version, mount, |_, _| {})
@@ -479,14 +435,14 @@ impl PartitionManagerPar for PartitionManager {
     /// - `progress_callback` - A callback function that will be called with the current mounting progress.
     fn from_game_with_callback_par<F>(
         retail_directory: PathBuf,
-        game_version: WoaVersion,
+        game_version: GlacierGame,
         mount: bool,
         progress_callback: F,
     ) -> Result<Self, PartitionManagerError>
     where
-        F: FnMut(usize, &PartitionState) + Send + Sync,
+        F: Fn(usize, &PartitionState) + Send + Sync,
     {
-        let game_paths = GamePaths::from_retail_directory(retail_directory)?;
+        let game_paths = GamePaths::from_retail_directory(retail_directory, game_version.into())?;
         let package_definition =
             PackageDefinitionSource::from_file(game_paths.package_definition_path, game_version)?;
 
@@ -498,6 +454,7 @@ impl PartitionManagerPar for PartitionManager {
         let mut package_manager = Self {
             runtime_directory: game_paths.runtime_path,
             partition_infos,
+            game_version,
             partitions: vec![],
         };
 
@@ -515,20 +472,26 @@ impl PartitionManagerPar for PartitionManager {
     /// - `progress_callback` - A callback function that will be called with the current mounting progress.
     fn mount_partitions_par<F>(&mut self, progress_callback: F) -> Result<(), PartitionManagerError>
     where
-        F: FnMut(usize, &PartitionState) + Send + Sync,
+        F: Fn(usize, &PartitionState) + Send + Sync,
     {
         let progress_callback = Arc::new(Mutex::new(progress_callback));
 
         let runtime_directory = self.runtime_directory.clone(); // Clone if needed
 
-        let results: Result<Vec<_>, PartitionManagerError> = self.partition_infos
+        let results: Result<Vec<_>, PartitionManagerError> = self
+            .partition_infos
             .par_iter()
             .enumerate()
             .map(|(index, partition_info)| {
-                Self::try_read_partition(&runtime_directory, partition_info.clone(), |state| {
-                    let mut cb = progress_callback.lock().unwrap();
-                    cb(index, state)
-                })
+                Self::try_read_partition(
+                    &runtime_directory,
+                    partition_info.clone(),
+                    self.game_version,
+                    |state| {
+                        let cb = progress_callback.lock().unwrap();
+                        cb(index, state)
+                    },
+                )
             })
             .filter_map(|result| match result {
                 Ok(Some(partition)) => Some(Ok(partition)),

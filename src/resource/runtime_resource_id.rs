@@ -32,7 +32,7 @@ pub enum PlatformTag {
     Pc = 0x01,
     Ps5 = 0x02,
     Scarlett = 0x03, //Xbox series X/S
-    Ounce = 0x04, // Nintendo Switch 2
+    Ounce = 0x04,    // Nintendo Switch 2
 }
 
 impl PlatformTag {
@@ -80,13 +80,6 @@ impl From<RuntimeResourceID> for u64 {
     }
 }
 
-#[allow(deprecated)]
-impl From<ResourceID> for RuntimeResourceID {
-    fn from(value: ResourceID) -> Self {
-        Self::from_resource_id(&value)
-    }
-}
-
 impl From<&str> for RuntimeResourceID {
     fn from(_: &str) -> Self {
         unimplemented!("Implicit conversion from &str to RuntimeResourceID is not allowed, use the from_raw_string function, or convert from a ResourceID.");
@@ -106,25 +99,19 @@ impl RuntimeResourceID {
         }
     }
 
-    /// Create RuntimeResourceID from ResourceID
-    #[deprecated(
-        since = "1.4.0",
-        note = "from_resource_id() hashes the ResourceID using the PC platform and is not platform-agnostic. \
-        Use from_resource_id_with_platform(..., \"pc\", ...) instead. \
-        In a future release `from_resource_id()` will hash the platform-agnostic ResourceID form by default."
-    )]
-    pub fn from_resource_id(rid: &ResourceID) -> Self {
-        Self::from_raw_string(&rid.resource_path_with_platform("pc"))
-    }
-
     /// Create a RuntimeResourceID from a ResourceID.
     ///
     /// `path_platform` is the platform added to the resource path before hashing. Example: the pc in `[assembly:/...].pc_extension`
     /// `rrid_platform_tag` is the platform tag encoded into the RuntimeResourceID. Example: the 02 prefix in `0x02ABCDEFABCDEF`
     ///
     /// These are not always the same. Hitman resources usually hash with `"pc"` but still use `PlatformTag::None`.
-    pub fn from_resource_id_with_platform(rid: &ResourceID, resource_platform: &str, runtime_platform: PlatformTag) -> Self {
-        Self::from_raw_string(&rid.resource_path_with_platform(resource_platform)).with_platform(runtime_platform)
+    pub fn from_resource_id_with_platform(
+        rid: &ResourceID,
+        resource_platform: &str,
+        runtime_platform: PlatformTag,
+    ) -> Self {
+        Self::from_raw_string(&rid.resource_path_with_platform(resource_platform))
+            .with_platform(runtime_platform)
     }
 
     ///prefer [from_resource_id] when possible
@@ -218,12 +205,12 @@ mod tests {
             RuntimeResourceID::from_resource_id_with_platform(&rid, "pc", PlatformTag::None),
             0x00290D5B143172A3
         );
-        assert_eq!(RuntimeResourceID::from(rid), 0x00290D5B143172A3);
     }
 
     #[test]
     fn platform_extraction_works() {
-        let rrid = RuntimeResourceID::from_raw_string("hello world").with_platform(PlatformTag::Ps5);
+        let rrid =
+            RuntimeResourceID::from_raw_string("hello world").with_platform(PlatformTag::Ps5);
         assert_eq!(rrid, 0x02B63BBBE01EEED0);
         assert_eq!(rrid.platform(), Some(PlatformTag::Ps5));
     }
@@ -237,13 +224,17 @@ mod tests {
 
     #[test]
     fn invalid_rrid_is_invalid() {
-        let rrid = RuntimeResourceID { id: 0x00FFFFFFFFFFFFFF };
+        let rrid = RuntimeResourceID {
+            id: 0x00FFFFFFFFFFFFFF,
+        };
         assert!(!rrid.is_valid());
     }
 
     #[test]
     fn unknown_platform_is_invalid() {
-        let rrid = RuntimeResourceID { id: 0x99B63BBBE01EEED0 };
+        let rrid = RuntimeResourceID {
+            id: 0x99B63BBBE01EEED0,
+        };
         assert!(!rrid.is_valid());
     }
 

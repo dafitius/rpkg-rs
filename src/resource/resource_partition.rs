@@ -1,7 +1,7 @@
 use crate::resource::partition_manager::PartitionState;
 use crate::resource::pdefs::PartitionInfo;
 use crate::resource::resource_info::ResourceInfo;
-use crate::{utils, GlacierResource, GlacierResourceError, WoaVersion};
+use crate::{utils, GlacierGame, GlacierResource, GlacierResourceError};
 use lazy_regex::regex::Regex;
 use std::cmp::Ordering;
 use std::fmt::Debug;
@@ -78,14 +78,16 @@ impl PartialOrd for PatchId {
 
 pub struct ResourcePartition {
     info: PartitionInfo,
+    glacier_game: GlacierGame,
     pub packages: HashMap<PatchId, ResourcePackage>,
     pub(crate) resources: HashMap<RuntimeResourceID, PatchId>,
 }
 
 impl ResourcePartition {
-    pub fn new(info: PartitionInfo) -> Self {
+    pub fn new(info: PartitionInfo, glacier_game: GlacierGame) -> Self {
         Self {
             info,
+            glacier_game,
             packages: Default::default(),
             resources: Default::default(),
         }
@@ -166,11 +168,15 @@ impl ResourcePartition {
         let patch_indices = patch_idx_result?;
 
         let base_package_path = runtime_path.join(self.info.filename(PatchId::Base));
-        self.mount_package(base_package_path.as_path(), PatchId::Base)?;
+        self.mount_package(
+            base_package_path.as_path(),
+            PatchId::Base,
+            self.glacier_game,
+        )?;
 
         for (index, patch_id) in patch_indices.clone().into_iter().enumerate() {
             let patch_package_path = runtime_path.join(self.info.filename(patch_id));
-            self.mount_package(patch_package_path.as_path(), patch_id)?;
+            self.mount_package(patch_package_path.as_path(), patch_id, self.glacier_game)?;
 
             state.install_progress = index as f32 / patch_indices.len() as f32;
             progress_callback(&state);
@@ -187,8 +193,9 @@ impl ResourcePartition {
         &mut self,
         package_path: &Path,
         patch_index: PatchId,
+        glacier_game: GlacierGame,
     ) -> Result<(), ResourcePartitionError> {
-        let rpkg = ResourcePackage::from_file(package_path).map_err(|e| {
+        let rpkg = ResourcePackage::from_file(package_path, glacier_game).map_err(|e| {
             ResourcePartitionError::ReadResourcePackageError(
                 e,
                 package_path
@@ -239,58 +246,67 @@ impl ResourcePartition {
             .collect()
     }
 
-    pub fn latest_resources_of_type(&self, resource_type: &str) -> Vec<(&ResourceInfo, PatchId)>{
-        self.resources
-            .iter()
-            .flat_map(|(rrid, idx)| {
-                if let Ok(info) = self.resource_info_from(rrid, *idx) {
-                    Some((info, *idx))
-                } else {
-                    None
-                }
-            }).filter(|(resource, _)| resource.data_type() == resource_type)
+    pub fn latest_resources_of_type(&self, resource_type: &str) -> Vec<(&ResourceInfo, PatchId)> {
+        self.latest_resources()
+            .into_iter()
+            .filter(|(resource, _)| resource.data_type() == resource_type)
             .collect()
     }
-    
-    pub fn latest_resources_of_glacier_type<G: GlacierResource>(&self) -> Vec<(&ResourceInfo, PatchId)>{
+
+    pub fn latest_resources_of_glacier_type<G: GlacierResource>(
+        &self,
+    ) -> Vec<(&ResourceInfo, PatchId)> {
         let resource_type: String = String::from_utf8_lossy(&G::resource_type()).into_owned();
         self.latest_resources_of_type(resource_type.as_str())
     }
 
     /// Returns a list of resources that have been removed.
     ///
-    /// This function goes through the partition and returns a list of resource marked as unneeded (i.e., deleted). 
+    /// This function goes through the partition and returns a list of resource marked as unneeded (i.e., deleted).
     /// Only resources actually deleted resources will be returned, if a resource is removed and the added again it will be ignored.
     /// If a package deletes a resource that was never present in any previous package, it will not be included in the returned list
     pub fn removed_resources(&self) -> Vec<(&ResourceInfo, PatchId)> {
-
         self.packages
             .iter()
             .flat_map(|(patch_id, package)| {
                 package
                     .unneeded_resource_ids()
                     .iter()
-                    .map(|&deletion| (*patch_id, *deletion)).collect::<Vec<_>>()
-            }).filter_map(|(_, deletion_rid)| {
+                    .map(|&deletion| (*patch_id, *deletion))
+                    .collect::<Vec<_>>()
+            })
+            .filter_map(|(_, deletion_rid)| {
                 let patches = self.resource_patch_indices(&deletion_rid);
-                if patches.is_empty() { return None } //resource is not present in any patch
-                if self.resources.contains_key(&deletion_rid) { return None } //resource was deleted, but was added again
+                if patches.is_empty() {
+                    return None;
+                } //resource is not present in any patch
+                if self.resources.contains_key(&deletion_rid) {
+                    return None;
+                } //resource was deleted, but was added again
                 patches.iter().max().and_then(|&latest_patch| {
                     self.resource_info_from(&deletion_rid, latest_patch)
-                        .ok().map(|resource_info| (resource_info, latest_patch))
+                        .ok()
+                        .map(|resource_info| (resource_info, latest_patch))
                 })
-            }).collect()
+            })
+            .collect()
     }
 
     pub fn removed_resources_of_type(&self, resource_type: &str) -> Vec<(&ResourceInfo, PatchId)> {
-        self.removed_resources().iter().filter(|(res_info, _)| res_info.data_type() == resource_type).cloned().collect()
+        self.removed_resources()
+            .iter()
+            .filter(|(res_info, _)| res_info.data_type() == resource_type)
+            .cloned()
+            .collect()
     }
 
-    pub fn removed_resources_of_glacier_type<G: GlacierResource>(&self) -> Vec<(&ResourceInfo, PatchId)>{
+    pub fn removed_resources_of_glacier_type<G: GlacierResource>(
+        &self,
+    ) -> Vec<(&ResourceInfo, PatchId)> {
         let resource_type: String = String::from_utf8_lossy(&G::resource_type()).into_owned();
         self.removed_resources_of_type(resource_type.as_str())
     }
-    
+
     pub fn read_resource(
         &self,
         rrid: &RuntimeResourceID,
@@ -312,7 +328,6 @@ impl ResourcePartition {
 
     pub fn read_glacier_resource<T>(
         &self,
-        woa_version: WoaVersion,
         rrid: &RuntimeResourceID,
     ) -> Result<T::Output, ResourcePartitionError>
     where
@@ -332,9 +347,9 @@ impl ResourcePartition {
             ResourcePartitionError::ReadResourcePackageError(e, self.info.filename(package_index))
         })?;
 
-        T::process_data(woa_version, bytes).map_err(ResourcePartitionError::ResourceError)
+        T::process_data(self.glacier_game, bytes).map_err(ResourcePartitionError::ResourceError)
     }
-    
+
     pub fn read_resource_from(
         &self,
         rrid: &RuntimeResourceID,

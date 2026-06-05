@@ -1,25 +1,25 @@
+use glacier_ini::ini_file::IniFileError;
+use glacier_ini::IniFileSystem;
+use lazy_regex::{regex, Lazy, Regex};
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::path::PathBuf;
 use std::str::FromStr;
-use glacier_ini::ini_file::IniFileError;
-use glacier_ini::IniFileSystem;
-use lazy_regex::{Lazy, Regex, regex};
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::encryption::xtea::XteaError;
 use crate::misc::resource_id::ResourceID;
+use crate::resource::legacy::LegacyGame;
 use crate::resource::pdefs::GameDiscoveryError::InvalidRuntimePath;
-use crate::resource::pdefs::PackageDefinitionSource::{HM2, HM2016, HM3};
 use crate::resource::pdefs::PartitionType::{Dlc, LanguageDlc, LanguageStandard, Standard};
 use crate::resource::resource_partition::PatchId;
-use crate::{utils, WoaVersion};
+use crate::{utils, GlacierGame, WoaGame};
+use glacier_base::encryption::xtea::{Xtea, XteaConfig, XteaError};
 
+pub mod bond_parser;
 pub mod h2016_parser;
 pub mod hm2_parser;
 pub mod hm3_parser;
-pub mod bond_parser;
 
 const RESOURCE_PATH_REGEX: &Lazy<Regex> = regex!(r"(\[[A-z]+:/.+?]).([A-z]+)");
 
@@ -30,6 +30,9 @@ pub enum PackageDefinitionError {
 
     #[error("Decryption error: {0}")]
     DecryptionError(#[from] XteaError),
+
+    #[error("Attempted to parse a legacy packagedefinition.txt, these don't exist")]
+    LegacyPackageDefinition,
 
     #[error("Invalid packagedefintiion file: ({0})")]
     UnexpectedFormat(String),
@@ -69,6 +72,12 @@ pub enum PartitionType {
 pub struct PartitionId {
     pub part_type: PartitionType,
     pub index: usize,
+}
+
+macro_rules! partition_id {
+    ($id:literal) => {
+        PartitionId::from_str($id).unwrap()
+    };
 }
 
 impl PartitionId {
@@ -163,7 +172,7 @@ impl Display for PartitionId {
 }
 
 /// Represents information about a resource partition.
-#[derive(Clone, Debug)]
+#[derive(Clone, Default, Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct PartitionInfo {
     /// The name of the partition, if available.
@@ -194,40 +203,6 @@ impl PartitionInfo {
         self.id.to_filename(patch_index)
     }
 
-    #[deprecated(since = "1.1.0", note = "you can push to the roots field directly")]
-    pub fn add_root(&mut self, resource_id: ResourceID) {
-        self.roots.push(resource_id);
-    }
-    #[deprecated(since = "1.1.0", note = "prefer direct access through the roots field")]
-    pub fn roots(&self) -> &Vec<ResourceID> {
-        &self.roots
-    }
-
-    #[deprecated(since = "1.1.0", note = "prefer direct access through the name field")]
-    pub fn name(&self) -> &Option<String> {
-        &self.name
-    }
-
-    #[deprecated(
-        since = "1.1.0",
-        note = "prefer direct access through the parent field"
-    )]
-    pub fn parent(&self) -> &Option<PartitionId> {
-        &self.parent
-    }
-
-    #[deprecated(since = "1.1.0", note = "prefer direct access through the id field")]
-    pub fn id(&self) -> PartitionId {
-        self.id.clone()
-    }
-    #[deprecated(
-        since = "1.1.0",
-        note = "prefer direct access through the patch_level field"
-    )]
-    pub fn max_patch_level(&self) -> usize {
-        self.patch_level
-    }
-
     pub fn set_max_patch_level(&mut self, patch_level: usize) {
         self.patch_level = patch_level
     }
@@ -235,22 +210,45 @@ impl PartitionInfo {
 
 pub trait PackageDefinitionParser {
     fn parse(data: &[u8]) -> Result<Vec<PartitionInfo>, PackageDefinitionError>;
+
+    fn decrypt_pdefs_to_str(
+        data: &[u8],
+        xtea_config: XteaConfig,
+    ) -> Result<String, PackageDefinitionError> {
+        let xtea = Xtea::new(xtea_config);
+        if xtea.is_encrypted_text_file(data) {
+            Ok(xtea.decrypt_text_file(data)?)
+        } else {
+            match String::from_utf8(data.to_vec()) {
+                Ok(v) => Ok(v),
+                Err(e) => Err(PackageDefinitionError::TextEncodingError(e)),
+            }
+        }
+    }
 }
 
 #[derive(Debug)]
 pub enum PackageDefinitionSource {
-    HM3(Vec<u8>),
-    HM2(Vec<u8>),
     HM2016(Vec<u8>),
+    HM2(Vec<u8>),
+    HM3(Vec<u8>),
+    Knt(Vec<u8>),
     Custom(Vec<PartitionInfo>),
 }
 
 impl PackageDefinitionSource {
-    pub fn from_version(woa_version: WoaVersion, data: Vec<u8>) -> Self {
-        match woa_version {
-            WoaVersion::HM2016 => HM2016(data),
-            WoaVersion::HM2 => HM2(data),
-            WoaVersion::HM3 => HM3(data),
+    pub fn from_memory(
+        data: Vec<u8>,
+        game_version: GlacierGame,
+    ) -> Result<Self, PackageDefinitionError> {
+        match game_version {
+            GlacierGame::Legacy(_) => Err(PackageDefinitionError::LegacyPackageDefinition),
+            GlacierGame::Woa(woa_game) => Ok(match woa_game {
+                WoaGame::HM2016 => PackageDefinitionSource::HM2016(data),
+                WoaGame::HM2 => PackageDefinitionSource::HM2(data),
+                WoaGame::HM3 => PackageDefinitionSource::HM3(data),
+            }),
+            GlacierGame::Knt => Ok(PackageDefinitionSource::Knt(data)),
         }
     }
 
@@ -261,26 +259,37 @@ impl PackageDefinitionSource {
     /// - `game_version` - The version of the game.
     pub fn from_file(
         path: PathBuf,
-        game_version: WoaVersion,
+        game_version: GlacierGame,
     ) -> Result<Self, PackageDefinitionError> {
         let package_definition_data =
             std::fs::read(path.as_path()).map_err(PackageDefinitionError::FailedToRead)?;
+        Self::from_memory(package_definition_data, game_version)
+    }
 
-        let package_definition = match game_version {
-            WoaVersion::HM2016 => PackageDefinitionSource::HM2016(package_definition_data),
-            WoaVersion::HM2 => PackageDefinitionSource::HM2(package_definition_data),
-            WoaVersion::HM3 => PackageDefinitionSource::HM3(package_definition_data),
-        };
-
-        Ok(package_definition)
+    pub fn for_legacy(version: LegacyGame) -> Self {
+        match version {
+            LegacyGame::CL482338 | LegacyGame::CL534170 | LegacyGame::CL535848 => {
+                PackageDefinitionSource::Custom(vec![
+                    PartitionInfo {
+                        id: partition_id!("chunk0"),
+                        ..Default::default()
+                    },
+                    PartitionInfo {
+                        id: partition_id!("chunk1"),
+                        ..Default::default()
+                    },
+                ])
+            }
+        }
     }
 
     pub fn read(&self) -> Result<Vec<PartitionInfo>, PackageDefinitionError> {
         match self {
-            PackageDefinitionSource::Custom(vec) => Ok(vec.clone()),
-            PackageDefinitionSource::HM3(vec) => hm3_parser::HM3Parser::parse(vec),
-            PackageDefinitionSource::HM2(vec) => hm2_parser::HM2Parser::parse(vec),
             PackageDefinitionSource::HM2016(vec) => h2016_parser::H2016Parser::parse(vec),
+            PackageDefinitionSource::HM2(vec) => hm2_parser::HM2Parser::parse(vec),
+            PackageDefinitionSource::HM3(vec) => hm3_parser::HM3Parser::parse(vec),
+            PackageDefinitionSource::Knt(vec) => bond_parser::BondParser::parse(vec),
+            PackageDefinitionSource::Custom(vec) => Ok(vec.clone()),
         }
     }
 }
@@ -314,11 +323,14 @@ impl GamePaths {
     ///
     /// # Arguments
     /// - `retail_directory` - The path to the game's retail directory.
-    pub fn from_retail_directory(retail_directory: PathBuf) -> Result<Self, GameDiscoveryError> {
+    pub fn from_retail_directory(
+        retail_directory: PathBuf,
+        xtea_config: XteaConfig,
+    ) -> Result<Self, GameDiscoveryError> {
         let thumbs_path = retail_directory.join("thumbs.dat");
 
         // Parse the thumbs file, so we can find the runtime path.
-        let thumbs = IniFileSystem::from_path(thumbs_path.as_path())
+        let thumbs = IniFileSystem::from_path(thumbs_path.as_path(), xtea_config)
             .map_err(GameDiscoveryError::FailedToParseThumbsFile)?;
 
         let app_options = &thumbs.root()["application"];
