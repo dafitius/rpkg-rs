@@ -1,5 +1,5 @@
 use crate::resource::resource_info::ResourceInfo;
-use crate::resource::resource_package::ReferenceType::{INSTALL, NORMAL, WEAK};
+use crate::resource::resource_package::ReferenceType::{INSTALL, NORMAL, STREAMED, WEAK};
 use crate::resource::runtime_resource_id::RuntimeResourceID;
 use crate::GlacierGame;
 use binrw::{binrw, parser, BinRead, BinReaderExt, BinResult};
@@ -410,6 +410,7 @@ pub enum ReferenceType {
     INSTALL = 0,
     NORMAL = 1,
     WEAK = 2,
+    STREAMED = 3,
 }
 
 impl ReferenceType {
@@ -421,6 +422,7 @@ impl ReferenceType {
             0 => INSTALL,
             1 => NORMAL,
             2 => WEAK,
+            3 => STREAMED,
             _ => NORMAL,
         }
     }
