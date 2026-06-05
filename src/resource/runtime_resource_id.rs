@@ -80,12 +80,6 @@ impl From<RuntimeResourceID> for u64 {
     }
 }
 
-impl From<ResourceID> for RuntimeResourceID {
-    fn from(value: ResourceID) -> Self {
-        Self::from_resource_id(&value)
-    }
-}
-
 impl From<&str> for RuntimeResourceID {
     fn from(_: &str) -> Self {
         unimplemented!("Implicit conversion from &str to RuntimeResourceID is not allowed, use the from_raw_string function, or convert from a ResourceID.");
@@ -103,11 +97,6 @@ impl RuntimeResourceID {
         Self {
             id: 0x00FFFFFFFFFFFFFF,
         }
-    }
-
-    /// Create RuntimeResourceID from ResourceID
-    pub fn from_resource_id(rid: &ResourceID) -> Self {
-        Self::from_raw_string(&rid.resource_path())
     }
 
     /// Create a RuntimeResourceID from a ResourceID.
@@ -216,7 +205,6 @@ mod tests {
             RuntimeResourceID::from_resource_id_with_platform(&rid, "pc", PlatformTag::None),
             0x00290D5B143172A3
         );
-        assert_eq!(RuntimeResourceID::from(rid), 0x00290D5B143172A3);
     }
 
     #[test]

@@ -1,7 +1,7 @@
 use md5::{Digest, Md5};
 use rpkg_rs::resource::package_builder::PackageBuilder;
 use rpkg_rs::resource::partition_manager::PartitionManager;
-use rpkg_rs::resource::resource_package::{ResourcePackageDataSource, ResourcePackageSource};
+use rpkg_rs::resource::resource_package::ResourcePackageDataSource;
 use rpkg_rs::{GlacierGame, WoaGame};
 use std::path::PathBuf;
 use std::{env, fs, io};
