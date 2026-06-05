@@ -32,7 +32,7 @@ pub enum PlatformTag {
     Pc = 0x01,
     Ps5 = 0x02,
     Scarlett = 0x03, //Xbox series X/S
-    Ounce = 0x04, // Nintendo Switch 2
+    Ounce = 0x04,    // Nintendo Switch 2
 }
 
 impl PlatformTag {
@@ -116,8 +116,13 @@ impl RuntimeResourceID {
     /// `rrid_platform_tag` is the platform tag encoded into the RuntimeResourceID. Example: the 02 prefix in `0x02ABCDEFABCDEF`
     ///
     /// These are not always the same. Hitman resources usually hash with `"pc"` but still use `PlatformTag::None`.
-    pub fn from_resource_id_with_platform(rid: &ResourceID, resource_platform: &str, runtime_platform: PlatformTag) -> Self {
-        Self::from_raw_string(&rid.resource_path_with_platform(resource_platform)).with_platform(runtime_platform)
+    pub fn from_resource_id_with_platform(
+        rid: &ResourceID,
+        resource_platform: &str,
+        runtime_platform: PlatformTag,
+    ) -> Self {
+        Self::from_raw_string(&rid.resource_path_with_platform(resource_platform))
+            .with_platform(runtime_platform)
     }
 
     ///prefer [from_resource_id] when possible
@@ -216,7 +221,8 @@ mod tests {
 
     #[test]
     fn platform_extraction_works() {
-        let rrid = RuntimeResourceID::from_raw_string("hello world").with_platform(PlatformTag::Ps5);
+        let rrid =
+            RuntimeResourceID::from_raw_string("hello world").with_platform(PlatformTag::Ps5);
         assert_eq!(rrid, 0x02B63BBBE01EEED0);
         assert_eq!(rrid.platform(), Some(PlatformTag::Ps5));
     }
@@ -230,13 +236,17 @@ mod tests {
 
     #[test]
     fn invalid_rrid_is_invalid() {
-        let rrid = RuntimeResourceID { id: 0x00FFFFFFFFFFFFFF };
+        let rrid = RuntimeResourceID {
+            id: 0x00FFFFFFFFFFFFFF,
+        };
         assert!(!rrid.is_valid());
     }
 
     #[test]
     fn unknown_platform_is_invalid() {
-        let rrid = RuntimeResourceID { id: 0x99B63BBBE01EEED0 };
+        let rrid = RuntimeResourceID {
+            id: 0x99B63BBBE01EEED0,
+        };
         assert!(!rrid.is_valid());
     }
 

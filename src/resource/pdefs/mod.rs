@@ -1,25 +1,25 @@
+use glacier_ini::ini_file::IniFileError;
+use glacier_ini::IniFileSystem;
+use lazy_regex::{regex, Lazy, Regex};
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::path::PathBuf;
 use std::str::FromStr;
-use glacier_ini::ini_file::IniFileError;
-use glacier_ini::IniFileSystem;
-use lazy_regex::{Lazy, Regex, regex};
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use glacier_base::encryption::xtea::{Xtea, XteaConfig, XteaError};
 use crate::misc::resource_id::ResourceID;
+use crate::resource::legacy::LegacyGame;
 use crate::resource::pdefs::GameDiscoveryError::InvalidRuntimePath;
 use crate::resource::pdefs::PartitionType::{Dlc, LanguageDlc, LanguageStandard, Standard};
 use crate::resource::resource_partition::PatchId;
 use crate::{utils, GlacierGame, WoaGame};
-use crate::resource::legacy::LegacyGame;
+use glacier_base::encryption::xtea::{Xtea, XteaConfig, XteaError};
 
+pub mod bond_parser;
 pub mod h2016_parser;
 pub mod hm2_parser;
 pub mod hm3_parser;
-pub mod bond_parser;
 
 const RESOURCE_PATH_REGEX: &Lazy<Regex> = regex!(r"(\[[A-z]+:/.+?]).([A-z]+)");
 
@@ -211,7 +211,10 @@ impl PartitionInfo {
 pub trait PackageDefinitionParser {
     fn parse(data: &[u8]) -> Result<Vec<PartitionInfo>, PackageDefinitionError>;
 
-    fn decrypt_pdefs_to_str(data: &[u8], xtea_config: XteaConfig) -> Result<String, PackageDefinitionError>{
+    fn decrypt_pdefs_to_str(
+        data: &[u8],
+        xtea_config: XteaConfig,
+    ) -> Result<String, PackageDefinitionError> {
         let xtea = Xtea::new(xtea_config);
         if xtea.is_encrypted_text_file(data) {
             Ok(xtea.decrypt_text_file(data)?)
@@ -234,8 +237,10 @@ pub enum PackageDefinitionSource {
 }
 
 impl PackageDefinitionSource {
-
-    pub fn from_memory(data: Vec<u8>, game_version: GlacierGame) -> Result<Self, PackageDefinitionError> {
+    pub fn from_memory(
+        data: Vec<u8>,
+        game_version: GlacierGame,
+    ) -> Result<Self, PackageDefinitionError> {
         match game_version {
             GlacierGame::Legacy(_) => Err(PackageDefinitionError::LegacyPackageDefinition),
             GlacierGame::Woa(woa_game) => Ok(match woa_game {
@@ -265,8 +270,14 @@ impl PackageDefinitionSource {
         match version {
             LegacyGame::CL482338 | LegacyGame::CL534170 | LegacyGame::CL535848 => {
                 PackageDefinitionSource::Custom(vec![
-                    PartitionInfo{ id: partition_id!("chunk0"), ..Default::default()},
-                    PartitionInfo{id: partition_id!("chunk1"), ..Default::default()}
+                    PartitionInfo {
+                        id: partition_id!("chunk0"),
+                        ..Default::default()
+                    },
+                    PartitionInfo {
+                        id: partition_id!("chunk1"),
+                        ..Default::default()
+                    },
                 ])
             }
         }
@@ -312,7 +323,10 @@ impl GamePaths {
     ///
     /// # Arguments
     /// - `retail_directory` - The path to the game's retail directory.
-    pub fn from_retail_directory(retail_directory: PathBuf, xtea_config: XteaConfig) -> Result<Self, GameDiscoveryError> {
+    pub fn from_retail_directory(
+        retail_directory: PathBuf,
+        xtea_config: XteaConfig,
+    ) -> Result<Self, GameDiscoveryError> {
         let thumbs_path = retail_directory.join("thumbs.dat");
 
         // Parse the thumbs file, so we can find the runtime path.

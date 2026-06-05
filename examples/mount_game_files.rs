@@ -35,30 +35,28 @@ fn main() {
     };
 
     // Discover the game paths.
-    let game_paths = match game_version{
+    let game_paths = match game_version {
         GlacierGame::Legacy(_) => GamePaths {
             project_path: retail_path.clone(),
             runtime_path: retail_path.clone(),
             package_definition_path: PathBuf::new(),
         },
 
-        _ => {
-            GamePaths::from_retail_directory(retail_path.clone(), game_version.into()).unwrap_or_else(|e| {
+        _ => GamePaths::from_retail_directory(retail_path.clone(), game_version.into())
+            .unwrap_or_else(|e| {
                 eprintln!("failed to discover game paths: {}", e);
                 std::process::exit(0);
-            })
-        }
+            }),
     };
 
     // Read and parse the package definition.
     let package_definition_source = match game_version {
         GlacierGame::Legacy(version) => PackageDefinitionSource::for_legacy(version),
-        _ => {
-            PackageDefinitionSource::from_file(game_paths.package_definition_path, game_version).unwrap_or_else(|e| {
+        _ => PackageDefinitionSource::from_file(game_paths.package_definition_path, game_version)
+            .unwrap_or_else(|e| {
                 eprintln!("failed to parse package definition: {}", e);
                 std::process::exit(0);
-            })
-        }
+            }),
     };
 
     let mut partition_infos = package_definition_source.read().unwrap_or_else(|e| {
@@ -71,13 +69,15 @@ fn main() {
         partition.set_max_patch_level(9);
     }
 
-    let mut package_manager =
-        PartitionManager::new(game_paths.runtime_path, game_version, &package_definition_source).unwrap_or_else(
-            |e| {
-                eprintln!("failed to init package manager: {}", e);
-                std::process::exit(0);
-            },
-        );
+    let mut package_manager = PartitionManager::new(
+        game_paths.runtime_path,
+        game_version,
+        &package_definition_source,
+    )
+    .unwrap_or_else(|e| {
+        eprintln!("failed to init package manager: {}", e);
+        std::process::exit(0);
+    });
 
     //read the packagedefs here
 
@@ -134,7 +134,7 @@ fn main() {
 
         let Ok(rid) = ResourceID::from_str(input_string.as_str()) else {
             println!("Given ResourceID is invalid");
-            continue
+            continue;
         };
 
         let rrid = RuntimeResourceID::from_resource_id_with_platform(&rid, "pc", PlatformTag::None);

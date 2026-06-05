@@ -161,7 +161,7 @@ impl ResourceID {
 
         if let Some(dot) = self.uri.rfind('.') {
             platform_uri.push_str(&self.uri[..=dot]);
-            if !platform_tag.is_empty(){
+            if !platform_tag.is_empty() {
                 platform_uri.push_str(platform_tag);
                 platform_uri.push('_');
             }
@@ -286,8 +286,16 @@ impl ResourceID {
         RuntimeResourceID::from_resource_id_with_platform(&self, "", runtime_platform)
     }
 
-    pub fn into_rrid_with_platform(self, resource_platform: &str, runtime_platform: PlatformTag) -> RuntimeResourceID {
-        RuntimeResourceID::from_resource_id_with_platform(&self, resource_platform, runtime_platform)
+    pub fn into_rrid_with_platform(
+        self,
+        resource_platform: &str,
+        runtime_platform: PlatformTag,
+    ) -> RuntimeResourceID {
+        RuntimeResourceID::from_resource_id_with_platform(
+            &self,
+            resource_platform,
+            runtime_platform,
+        )
     }
 }
 
@@ -296,7 +304,6 @@ mod tests {
     use super::*;
     #[test]
     fn test_creation() -> Result<(), ResourceIDError> {
-
         let rid = ResourceID::from_str(
             "[assembly:/_PRO/Scenes/Missions/thefacility/vr_tutorial_pc_graduation.brick].entitytype",
         )?;
@@ -447,7 +454,9 @@ mod tests {
         );
         assert_ne!(
             plain.clone().into_rrid_with_platform("", PlatformTag::Ps5),
-            plain.clone().into_rrid_with_platform("", PlatformTag::Ounce)
+            plain
+                .clone()
+                .into_rrid_with_platform("", PlatformTag::Ounce)
         );
 
         Ok(())

@@ -1,6 +1,7 @@
 use crate::misc::resource_id::ResourceID;
 use crate::resource::pdefs::{
-    PackageDefinitionError, PackageDefinitionParser, PartitionId, PartitionInfo, PartitionType, RESOURCE_PATH_REGEX,
+    PackageDefinitionError, PackageDefinitionParser, PartitionId, PartitionInfo, PartitionType,
+    RESOURCE_PATH_REGEX,
 };
 use glacier_base::encryption::xtea::XteaConfig;
 use lazy_regex::regex;

@@ -2,10 +2,10 @@ use rpkg_rs::misc::resource_id::ResourceID;
 use rpkg_rs::resource::pdefs::PartitionInfo;
 use rpkg_rs::resource::resource_partition::ResourcePartition;
 use rpkg_rs::resource::runtime_resource_id::{PlatformTag, RuntimeResourceID};
+use rpkg_rs::{GlacierGame, WoaGame};
 use std::env;
 use std::path::PathBuf;
 use std::str::FromStr;
-use rpkg_rs::{GlacierGame, WoaGame};
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -22,7 +22,8 @@ fn main() {
         std::process::exit(0)
     });
 
-    let rrid: RuntimeResourceID = RuntimeResourceID::from_resource_id_with_platform(&rid, "pc", PlatformTag::None);
+    let rrid: RuntimeResourceID =
+        RuntimeResourceID::from_resource_id_with_platform(&rid, "pc", PlatformTag::None);
 
     let partition_info = PartitionInfo::from_id(&args[2]).unwrap_or_else(|e| {
         println!("Failed parse partition id: {:?}", e);

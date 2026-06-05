@@ -1,13 +1,13 @@
 use rpkg_rs::misc::resource_id::ResourceID;
 use rpkg_rs::resource::package_builder::{PackageBuilder, PackageResourceBuilder};
 use rpkg_rs::resource::resource_package::{
-    ChunkType, PackageVersion, ResourcePackage, ResourceReferenceFlags, ResourceReferenceFlagsLegacy,
-    ResourceReferenceFlagsStandard,
+    ChunkType, PackageVersion, ResourcePackage, ResourceReferenceFlags,
+    ResourceReferenceFlagsLegacy, ResourceReferenceFlagsStandard,
 };
-use rpkg_rs::resource::runtime_resource_id::{PlatformTag, RuntimeResourceID};
-use std::str::FromStr;
-use rpkg_rs::{GlacierGame, WoaGame};
 use rpkg_rs::resource::resource_partition::PatchId;
+use rpkg_rs::resource::runtime_resource_id::{PlatformTag, RuntimeResourceID};
+use rpkg_rs::{GlacierGame, WoaGame};
+use std::str::FromStr;
 
 fn test_package_with_resource(
     compression_level: Option<i32>,
@@ -19,21 +19,29 @@ fn test_package_with_resource(
     let resource_id = ResourceID::from_str("[assembly:/res1.brick].pc_entitytype")?;
 
     let unneeded_resource_ids = vec![
-        RuntimeResourceID::from_resource_id_with_platform(&ResourceID::from_str(
-            "[assembly:/res2.brick].pc_entitytype",
-        )?, "pc", PlatformTag::None),
-        RuntimeResourceID::from_resource_id_with_platform(&ResourceID::from_str(
-            "[assembly:/res3.brick].pc_entitytype",
-        )?, "pc", PlatformTag::None),
+        RuntimeResourceID::from_resource_id_with_platform(
+            &ResourceID::from_str("[assembly:/res2.brick].pc_entitytype")?,
+            "pc",
+            PlatformTag::None,
+        ),
+        RuntimeResourceID::from_resource_id_with_platform(
+            &ResourceID::from_str("[assembly:/res3.brick].pc_entitytype")?,
+            "pc",
+            PlatformTag::None,
+        ),
     ];
 
     let references = vec![
-        RuntimeResourceID::from_resource_id_with_platform(&ResourceID::from_str(
-            "[assembly:/ref1.brick].pc_entitytype",
-        )?, "pc", PlatformTag::None),
-        RuntimeResourceID::from_resource_id_with_platform(&ResourceID::from_str(
-            "[assembly:/ref2.brick].pc_entitytype",
-        )?, "pc", PlatformTag::None),
+        RuntimeResourceID::from_resource_id_with_platform(
+            &ResourceID::from_str("[assembly:/ref1.brick].pc_entitytype")?,
+            "pc",
+            PlatformTag::None,
+        ),
+        RuntimeResourceID::from_resource_id_with_platform(
+            &ResourceID::from_str("[assembly:/ref2.brick].pc_entitytype")?,
+            "pc",
+            PlatformTag::None,
+        ),
     ];
 
     let resource_reference_flags = if legacy_references {
@@ -43,14 +51,17 @@ fn test_package_with_resource(
                 .with_install_dependency(true),
         )
     } else {
-        ResourceReferenceFlags::Standard(ResourceReferenceFlagsStandard::new().with_language_code(0x1F))
+        ResourceReferenceFlags::Standard(
+            ResourceReferenceFlagsStandard::new().with_language_code(0x1F),
+        )
     };
 
     // Start building the package.
     let mut builder = PackageBuilder::new(69, ChunkType::Standard, GlacierGame::Woa(WoaGame::HM3));
 
     // Create a fake resource id and data for the resource.
-    let rrid: RuntimeResourceID = RuntimeResourceID::from_resource_id_with_platform(&resource_id, "pc", PlatformTag::None);
+    let rrid: RuntimeResourceID =
+        RuntimeResourceID::from_resource_id_with_platform(&resource_id, "pc", PlatformTag::None);
     let fake_data: Vec<u8> = (0..1024).map(|j| j as u8).collect();
 
     // Create a resource from memory and add it to the package.
@@ -77,7 +88,7 @@ fn test_package_with_resource(
         }
     }
 
-    if legacy_references{
+    if legacy_references {
         builder.use_legacy_references();
     }
 
@@ -85,7 +96,8 @@ fn test_package_with_resource(
     let package_data = builder.build_to_vec(version)?;
 
     // Now let's try to parse it again.
-    let package = ResourcePackage::from_memory(package_data, is_patch, GlacierGame::Woa(WoaGame::HM3))?;
+    let package =
+        ResourcePackage::from_memory(package_data, is_patch, GlacierGame::Woa(WoaGame::HM3))?;
 
     // Check that its data matches the original.
     let resource_data = package.read_resource(&rrid)?;

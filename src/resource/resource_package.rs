@@ -1,5 +1,7 @@
 use crate::resource::resource_info::ResourceInfo;
 use crate::resource::resource_package::ReferenceType::{INSTALL, NORMAL, WEAK};
+use crate::resource::runtime_resource_id::RuntimeResourceID;
+use crate::GlacierGame;
 use binrw::{binrw, parser, BinRead, BinReaderExt, BinResult};
 use bitfield_struct::bitfield;
 use indexmap::IndexMap;
@@ -12,8 +14,6 @@ use std::iter::zip;
 use std::path::{Path, PathBuf};
 use std::{fmt, io};
 use thiserror::Error;
-use crate::GlacierGame;
-use crate::resource::runtime_resource_id::RuntimeResourceID;
 
 #[derive(Debug, Error)]
 pub enum ResourcePackageError {
@@ -41,7 +41,7 @@ pub enum ResourcePackageDataSource {
 
 pub struct ResourcePackageSource {
     pub data: ResourcePackageDataSource,
-    pub game: GlacierGame
+    pub game: GlacierGame,
 }
 
 /// The version of the package.
@@ -89,7 +89,10 @@ pub struct ResourcePackage {
 }
 
 #[parser(reader: reader, endian)]
-fn resource_parser(file_count: u32, game_version: GlacierGame) -> BinResult<IndexMap<RuntimeResourceID, ResourceInfo>> {
+fn resource_parser(
+    file_count: u32,
+    game_version: GlacierGame,
+) -> BinResult<IndexMap<RuntimeResourceID, ResourceInfo>> {
     let mut map = IndexMap::new();
     let mut resource_entries = vec![];
     for _ in 0..file_count {
@@ -98,7 +101,11 @@ fn resource_parser(file_count: u32, game_version: GlacierGame) -> BinResult<Inde
 
     let mut resource_metadata = vec![];
     for _ in 0..file_count {
-        resource_metadata.push(ResourceHeader::read_options(reader, endian, (game_version,))?);
+        resource_metadata.push(ResourceHeader::read_options(
+            reader,
+            endian,
+            (game_version,),
+        )?);
     }
 
     let resources = zip(resource_entries, resource_metadata)
@@ -117,30 +124,33 @@ impl ResourcePackage {
     ///
     /// # Arguments
     /// * `package_path` - The path to the file to parse.
-    pub fn from_file<P: AsRef<Path> + Copy>(package_path: P, glacier_game: GlacierGame) -> Result<Self, ResourcePackageError> {
+    pub fn from_file<P: AsRef<Path> + Copy>(
+        package_path: P,
+        glacier_game: GlacierGame,
+    ) -> Result<Self, ResourcePackageError> {
         let file = File::open(package_path).map_err(ResourcePackageError::IoError)?;
         let mmap = unsafe { Mmap::map(&file).map_err(ResourcePackageError::IoError)? };
         let mut reader = Cursor::new(&mmap[..]);
-        
+
         let package_path = package_path.as_ref();
-        
+
         let is_patch = package_path
             .file_name()
             .and_then(|f| f.to_str())
             .map(|s| s.contains("patch"))
             .unwrap_or(false);
 
-        let source = ResourcePackageSource{
+        let source = ResourcePackageSource {
             data: ResourcePackageDataSource::File(package_path.to_path_buf()),
             game: glacier_game,
         };
 
         if let GlacierGame::Legacy(legacy_game) = glacier_game {
-            return crate::resource::legacy::read_package_from_file(legacy_game, package_path)
+            return crate::resource::legacy::read_package_from_file(legacy_game, package_path);
         }
 
         reader
-            .read_ne_args::<ResourcePackage>((is_patch,source))
+            .read_ne_args::<ResourcePackage>((is_patch, source))
             .map_err(ResourcePackageError::ParsingError)
     }
 
@@ -149,22 +159,27 @@ impl ResourcePackage {
     /// # Arguments
     /// * `data` - The data to parse.
     /// * `is_patch` - Whether the package is a patch package.
-    pub fn from_memory(data: Vec<u8>, is_patch: bool, glacier_game: GlacierGame) -> Result<Self, ResourcePackageError> {
+    pub fn from_memory(
+        data: Vec<u8>,
+        is_patch: bool,
+        glacier_game: GlacierGame,
+    ) -> Result<Self, ResourcePackageError> {
         let mut reader = Cursor::new(&data);
-        let source = ResourcePackageSource{
+        let source = ResourcePackageSource {
             data: ResourcePackageDataSource::None,
             game: glacier_game,
         };
 
         if let GlacierGame::Legacy(legacy_game) = glacier_game {
-            return crate::resource::legacy::read_package_from_memory(legacy_game, data)
+            return crate::resource::legacy::read_package_from_memory(legacy_game, data);
         }
 
         reader
-            .read_ne_args::<ResourcePackage>((is_patch,source)).map(|mut pck| {
-            pck.source.data = ResourcePackageDataSource::Memory(data);
-            pck
-        })
+            .read_ne_args::<ResourcePackage>((is_patch, source))
+            .map(|mut pck| {
+                pck.source.data = ResourcePackageDataSource::Memory(data);
+                pck
+            })
             .map_err(ResourcePackageError::ParsingError)
     }
 
@@ -255,9 +270,7 @@ impl ResourcePackage {
                 data[start_offset..end_offset].to_vec()
             }
 
-            ResourcePackageDataSource::None => {
-                Err(ResourcePackageError::NoSource)?
-            }
+            ResourcePackageDataSource::None => Err(ResourcePackageError::NoSource)?,
         };
 
         if is_scrambled {

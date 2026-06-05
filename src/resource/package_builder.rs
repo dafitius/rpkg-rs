@@ -6,18 +6,22 @@ use std::io::{BufWriter, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 
 use crate::resource::pdefs::{PartitionId, PartitionType};
-use crate::resource::resource_package::{ChunkType, PackageHeader, PackageMetadata, PackageOffsetFlags, PackageOffsetInfo, PackageVersion, ResourceHeader, ResourcePackage, ResourcePackageDataSource, ResourcePackageSource, ResourceReferenceCountAndFlags, ResourceReferenceFlags};
+use crate::resource::resource_info::ResourceInfo;
+use crate::resource::resource_package::{
+    ChunkType, PackageHeader, PackageMetadata, PackageOffsetFlags, PackageOffsetInfo,
+    PackageVersion, ResourceHeader, ResourcePackage, ResourcePackageDataSource,
+    ResourcePackageSource, ResourceReferenceCountAndFlags, ResourceReferenceFlags,
+};
 use crate::resource::resource_partition::PatchId;
 use crate::resource::runtime_resource_id::RuntimeResourceID;
-use crate::{GlacierResource, GlacierResourceError, GlacierGame, WoaGame};
-use binrw::BinWrite;
+use crate::{GlacierGame, GlacierResource, GlacierResourceError, WoaGame};
 use binrw::__private::Required;
 use binrw::io::Cursor;
 use binrw::meta::WriteEndian;
+use binrw::BinWrite;
 use indexmap::{IndexMap, IndexSet};
 use lzzzz::{lz4, lz4_hc};
 use thiserror::Error;
-use crate::resource::resource_info::ResourceInfo;
 
 /// `PackageResourceBlob` is an enum representing various types of package resource stores, which can
 /// include files, file sections, and memory buffers, optionally compressed or scrambled.
@@ -301,7 +305,11 @@ impl PackageResourceBuilder {
         } else {
             PackageResourceBlob::Memory {
                 data,
-                compression_level: if resource_info.is_compressed() {Some(12)} else {None},
+                compression_level: if resource_info.is_compressed() {
+                    Some(12)
+                } else {
+                    None
+                },
                 should_scramble: resource_info.is_scrambled(),
             }
         };
@@ -325,7 +333,7 @@ impl PackageResourceBuilder {
     pub fn from_glacier_resource<G: GlacierResource>(
         rrid: RuntimeResourceID,
         glacier_resource: &G,
-        woa_version: GlacierGame
+        woa_version: GlacierGame,
     ) -> Result<Self, PackageResourceBuilderError> {
         let system_memory_requirement = glacier_resource.system_memory_requirement();
         let video_memory_requirement = glacier_resource.video_memory_requirement();
@@ -335,13 +343,22 @@ impl PackageResourceBuilder {
 
         Ok(Self {
             rrid,
-            resource_type: G::resource_type().into_iter().rev().collect::<Vec<_>>().try_into().unwrap(),
+            resource_type: G::resource_type()
+                .into_iter()
+                .rev()
+                .collect::<Vec<_>>()
+                .try_into()
+                .unwrap(),
             system_memory_requirement: u32::try_from(system_memory_requirement).unwrap_or(u32::MAX),
             video_memory_requirement: u32::try_from(video_memory_requirement).unwrap_or(u32::MAX),
             references: vec![],
             blob: PackageResourceBlob::Memory {
                 data,
-                compression_level: if glacier_resource.should_compress() {Some(12)} else {None},
+                compression_level: if glacier_resource.should_compress() {
+                    Some(12)
+                } else {
+                    None
+                },
                 should_scramble: glacier_resource.should_scramble(),
             },
         })
@@ -375,7 +392,8 @@ impl PackageResourceBuilder {
         P: Borrow<(RuntimeResourceID, ResourceReferenceFlags)>,
         (RuntimeResourceID, ResourceReferenceFlags): Copy,
     {
-        self.references.extend(refs.into_iter().map(|p| *p.borrow()));
+        self.references
+            .extend(refs.into_iter().map(|p| *p.borrow()));
         self
     }
     /// Sets the memory requirements of the resource.
@@ -437,7 +455,7 @@ pub enum PackageBuilderError {
 
     #[error("Building of legacy packages is not supported")]
     LegacyPackageNotSupported,
-    
+
     #[error("Legacy flag format is not supported by {0}")]
     LegacyFlagsNotSupported(GlacierGame),
 
@@ -531,7 +549,11 @@ impl PackageBuilder {
     /// # Arguments
     /// * `partition_id` - The partition id of the package.
     /// * `patch_id` - The patch id of the package.
-    pub fn new_with_patch_id(partition_id: PartitionId, patch_id: PatchId, game_version: GlacierGame) -> Self {
+    pub fn new_with_patch_id(
+        partition_id: PartitionId,
+        patch_id: PatchId,
+        game_version: GlacierGame,
+    ) -> Self {
         Self {
             partition_id,
             patch_id,
@@ -620,8 +642,8 @@ impl PackageBuilder {
                         resource.is_scrambled(),
                     )
                     .map_err(|e| PackageBuilderError::CannotDuplicateResource(*rrid, e))?
-                },
-                &ResourcePackageDataSource::None => Err(PackageBuilderError::NoSource)?
+                }
+                &ResourcePackageDataSource::None => Err(PackageBuilderError::NoSource)?,
             };
 
             builder.with_memory_requirements(
@@ -702,7 +724,6 @@ impl PackageBuilder {
         self
     }
 
-
     /// Marks multiple resources as unneeded.
     ///
     /// # Arguments
@@ -710,10 +731,11 @@ impl PackageBuilder {
     pub fn with_unneeded_resources<I, P>(&mut self, rrids: I) -> &mut Self
     where
         I: IntoIterator<Item = P>,
-        P: Borrow<RuntimeResourceID>, 
+        P: Borrow<RuntimeResourceID>,
         RuntimeResourceID: Copy,
     {
-        self.unneeded_resources.extend(rrids.into_iter().map(|p| *p.borrow()));
+        self.unneeded_resources
+            .extend(rrids.into_iter().map(|p| *p.borrow()));
         self
     }
 
@@ -734,8 +756,7 @@ impl PackageBuilder {
         patch_offset: u64,
         data: &T,
         args: T::Args<'_>,
-    ) -> Result<(), PackageBuilderError>
-    {
+    ) -> Result<(), PackageBuilderError> {
         let current_offset = writer
             .stream_position()
             .map_err(PackageBuilderError::IoError)?;
@@ -749,7 +770,6 @@ impl PackageBuilder {
             .map_err(PackageBuilderError::IoError)?;
         Ok(())
     }
-
 
     /// Writes the offset table to the given writer.
     fn write_offset_table<W: Write + Seek>(
@@ -879,7 +899,12 @@ impl PackageBuilder {
 
                 // Calculate the size and patch the metadata.
                 resource_metadata.references_chunk_size = reference_table_size as u32;
-                PackageBuilder::backpatch_le_args(writer, metadata_offset, &resource_metadata, (self.game_version,))?;
+                PackageBuilder::backpatch_le_args(
+                    writer,
+                    metadata_offset,
+                    &resource_metadata,
+                    (self.game_version,),
+                )?;
             }
         }
 
@@ -909,10 +934,10 @@ impl PackageBuilder {
             return Err(PackageBuilderError::UnneededResourcesNotSupported);
         }
 
-        if matches!(self.game_version, GlacierGame::Legacy(_)){
+        if matches!(self.game_version, GlacierGame::Legacy(_)) {
             return Err(PackageBuilderError::LegacyPackageNotSupported);
         }
-        
+
         let allowed_rpkg_version = match (version, self.game_version) {
             (PackageVersion::RPKGv1, GlacierGame::Legacy(_)) => true,
             (PackageVersion::RPKGv1, GlacierGame::Woa(_)) => true,
@@ -923,10 +948,16 @@ impl PackageBuilder {
         };
 
         if !allowed_rpkg_version {
-            return Err(PackageBuilderError::PackageVersionNotSupported(version, self.game_version));
+            return Err(PackageBuilderError::PackageVersionNotSupported(
+                version,
+                self.game_version,
+            ));
         }
 
-        let legacy_flags_supported = matches!(self.game_version, GlacierGame::Legacy(_) | GlacierGame::Woa(WoaGame::HM2016));
+        let legacy_flags_supported = matches!(
+            self.game_version,
+            GlacierGame::Legacy(_) | GlacierGame::Woa(WoaGame::HM2016)
+        );
         if self.use_legacy_references && !legacy_flags_supported {
             return Err(PackageBuilderError::LegacyFlagsNotSupported(
                 self.game_version,
@@ -935,7 +966,7 @@ impl PackageBuilder {
 
         // First create a base header. We'll fill it and patch it later.
         let mut header = ResourcePackage {
-            source: ResourcePackageSource{
+            source: ResourcePackageSource {
                 data: ResourcePackageDataSource::None,
                 game: self.game_version,
             },
@@ -1143,16 +1174,24 @@ impl PackageBuilder {
     /// # Arguments
     /// * `version` - The version of the package to build.
     /// * `writer` - The struct implementing the Write and Seek traits.
-    pub fn build_to_writer<W: Write + Seek>(self, version: PackageVersion, writer: &mut W) -> Result<(), PackageBuilderError>{
+    pub fn build_to_writer<W: Write + Seek>(
+        self,
+        version: PackageVersion,
+        writer: &mut W,
+    ) -> Result<(), PackageBuilderError> {
         self.build_internal(version, writer)
     }
-    
+
     /// Builds the package for the given version and writes it to the given path.
     ///
     /// # Arguments
     /// * `version` - The version of the package to build.
     /// * `output_path` - The path to the output file.
-    pub fn build_to_file<P: AsRef<Path>>(self, version: PackageVersion, output_path: P) -> Result<(), PackageBuilderError> {
+    pub fn build_to_file<P: AsRef<Path>>(
+        self,
+        version: PackageVersion,
+        output_path: P,
+    ) -> Result<(), PackageBuilderError> {
         let output_path: &Path = output_path.as_ref();
         let output_file = match output_path.is_dir() {
             true => output_path.join(self.partition_id.to_filename(self.patch_id)),

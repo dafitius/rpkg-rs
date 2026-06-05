@@ -17,8 +17,7 @@ fn test_game_mounting(
         Err(_) => return Err(format!("{} environment variable not set", path_env_var).into()),
     };
 
-    let package_manager =
-        PartitionManager::from_game(game_retail_path, game_version, true)?;
+    let package_manager = PartitionManager::from_game(game_retail_path, game_version, true)?;
 
     assert!(package_manager.partitions.len() > 0);
 
@@ -116,8 +115,7 @@ fn test_game_rebuild(
     println!("Output path: {:?}", output_path);
 
     // Mount the game.
-    let package_manager =
-        PartitionManager::from_game(game_retail_path, game_version, true)?;
+    let package_manager = PartitionManager::from_game(game_retail_path, game_version, true)?;
 
     // Rebuild each package one by one.
     for partition in package_manager.partitions {
@@ -140,10 +138,7 @@ fn test_game_rebuild(
             }
 
             // And now build it.
-            builder.build_to_file(
-                package.version(),
-                output_path.join(&output_name).as_path(),
-            )?;
+            builder.build_to_file(package.version(), output_path.join(&output_name).as_path())?;
 
             // After it's built, check if the generated file is the same as the original.
             let original_file = match &package.source().data {

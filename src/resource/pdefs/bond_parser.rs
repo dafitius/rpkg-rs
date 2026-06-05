@@ -1,8 +1,9 @@
-use glacier_base::encryption::xtea::XteaConfig;
 use crate::misc::resource_id::ResourceID;
 use crate::resource::pdefs::{
-    PackageDefinitionError, PackageDefinitionParser, PartitionId, PartitionInfo, PartitionType, RESOURCE_PATH_REGEX,
+    PackageDefinitionError, PackageDefinitionParser, PartitionId, PartitionInfo, PartitionType,
+    RESOURCE_PATH_REGEX,
 };
+use glacier_base::encryption::xtea::XteaConfig;
 use lazy_regex::regex;
 use std::str::FromStr;
 
@@ -10,7 +11,6 @@ pub struct BondParser;
 
 impl PackageDefinitionParser for BondParser {
     fn parse(data: &[u8]) -> Result<Vec<PartitionInfo>, PackageDefinitionError> {
-        
         let deciphered_data = Self::decrypt_pdefs_to_str(data, XteaConfig::Knt)?;
         let mut partitions: Vec<PartitionInfo> = vec![];
 

@@ -11,8 +11,8 @@
 //!
 //! rpkg-rs aims to streamline the process of working with Hitman game resources, offering a robust set of features to read ResourcePackage files.
 
-use std::fmt::{Display, Formatter};
 use glacier_base::encryption::xtea::XteaConfig;
+use std::fmt::{Display, Formatter};
 use thiserror::Error;
 
 #[cfg(feature = "serde")]
@@ -29,7 +29,7 @@ pub use resource::legacy::LegacyGame;
 pub enum WoaGame {
     HM2016,
     HM2,
-    HM3
+    HM3,
 }
 
 #[non_exhaustive]
@@ -38,34 +38,43 @@ pub enum WoaGame {
 pub enum GlacierGame {
     Legacy(LegacyGame),
     Woa(WoaGame),
-    Knt
+    Knt,
 }
 
-impl From<GlacierGame> for XteaConfig{
+impl From<GlacierGame> for XteaConfig {
     fn from(value: GlacierGame) -> Self {
         match value {
-            GlacierGame::Legacy(_) => {XteaConfig::Woa}
-            GlacierGame::Woa(_) => {XteaConfig::Woa}
-            GlacierGame::Knt => {XteaConfig::Knt}
+            GlacierGame::Legacy(_) => XteaConfig::Woa,
+            GlacierGame::Woa(_) => XteaConfig::Woa,
+            GlacierGame::Knt => XteaConfig::Knt,
         }
     }
 }
 
 impl Display for GlacierGame {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("{}", match self {
-            GlacierGame::Legacy(game) => {match game {
-                LegacyGame::CL482338 => {"Hitman Alpha cl482338"}
-                LegacyGame::CL534170 => {"Hitman Alpha cl534170"}
-                LegacyGame::CL535848 => {"Hitman Alpha cl535848"}
-            }}
-            GlacierGame::Woa(game) => {match game {
-                WoaGame::HM2016 => {"Hitman 1"}
-                WoaGame::HM2 => {"Hitman 2"}
-                WoaGame::HM3 => {"Hitman 3"}
-            }}
-            GlacierGame::Knt => {"007: First Light"}
-        }))
+        f.write_fmt(format_args!(
+            "{}",
+            match self {
+                GlacierGame::Legacy(game) => {
+                    match game {
+                        LegacyGame::CL482338 => "Hitman Alpha cl482338",
+                        LegacyGame::CL534170 => "Hitman Alpha cl534170",
+                        LegacyGame::CL535848 => "Hitman Alpha cl535848",
+                    }
+                }
+                GlacierGame::Woa(game) => {
+                    match game {
+                        WoaGame::HM2016 => "Hitman 1",
+                        WoaGame::HM2 => "Hitman 2",
+                        WoaGame::HM3 => "Hitman 3",
+                    }
+                }
+                GlacierGame::Knt => {
+                    "007: First Light"
+                }
+            }
+        ))
     }
 }
 
@@ -76,7 +85,7 @@ pub enum GlacierResourceError {
 
     #[error("Couldn't read the resource {0}")]
     ReadError(String),
-    
+
     #[error("Couldn't write the resource {0}")]
     WriteError(String),
 }
