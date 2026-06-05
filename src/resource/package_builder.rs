@@ -420,15 +420,16 @@ impl PackageResourceBuilder {
 /// # use rpkg_rs::resource::resource_partition::PatchId;
 /// # use rpkg_rs::resource::runtime_resource_id::RuntimeResourceID;
 /// # use rpkg_rs::resource::package_builder::PackageBuilder;
+/// # use rpkg_rs::GlacierGame;
 /// # use std::error::Error;
 /// # use std::fs;
 /// # fn main() -> Result<(), Box<dyn Error>>{
-/// #   let temp_dir = tempfile::tempdir()?;
+/// let temp_dir = tempfile::tempdir()?;
 /// #   let output_path = temp_dir.path();
 ///
-///     let mut builder = PackageBuilder::new_with_patch_id(PartitionId::default(), PatchId::Base);
+///     let mut builder = PackageBuilder::new_with_patch_id(PartitionId::default(), PatchId::Base, GlacierGame::Knt);
 ///     builder.with_resource(PackageResourceBuilder::from_memory(RuntimeResourceID::default(), "TYPE", vec![0,1,2,3,4,5], None, false).unwrap());
-///     builder.build(PackageVersion::RPKGv2, output_path)?;
+///     builder.build_to_file(PackageVersion::RPKGv2, output_path)?;
 ///
 ///     assert!(temp_dir.path().join("chunk0.rpkg").exists());
 /// #   Ok(())

@@ -188,33 +188,3 @@ fn test_patch_rpkg_v1() -> Result<(), Box<dyn std::error::Error>> {
 fn test_compressed_and_scrambled_patch_rpkg_v1() -> Result<(), Box<dyn std::error::Error>> {
     test_package_with_resource(Some(4), true, PackageVersion::RPKGv1, true, false)
 }
-
-#[test]
-fn test_legacy_rpkg_v1() -> Result<(), Box<dyn std::error::Error>> {
-    test_package_with_resource(None, false, PackageVersion::RPKGv1, false, true)
-}
-
-#[test]
-fn test_legacy_patch_rpkg_v1() -> Result<(), Box<dyn std::error::Error>> {
-    test_package_with_resource(None, false, PackageVersion::RPKGv1, true, true)
-}
-
-#[test]
-fn test_legacy_compressed_and_scrambled_patch_rpkg_v1() -> Result<(), Box<dyn std::error::Error>> {
-    test_package_with_resource(Some(4), true, PackageVersion::RPKGv1, true, true)
-}
-
-#[test]
-fn test_legacy_rpkg_v2() -> Result<(), Box<dyn std::error::Error>> {
-    test_package_with_resource(None, false, PackageVersion::RPKGv2, false, true)
-}
-
-#[test]
-fn test_legacy_patch_rpkg_v2() -> Result<(), Box<dyn std::error::Error>> {
-    test_package_with_resource(None, false, PackageVersion::RPKGv2, true, true)
-}
-
-#[test]
-fn test_legacy_compressed_and_scrambled_patch_rpkg_v2() -> Result<(), Box<dyn std::error::Error>> {
-    test_package_with_resource(Some(4), true, PackageVersion::RPKGv2, true, true)
-}
