@@ -6,14 +6,10 @@ use std::io::{BufWriter, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 
 use crate::resource::pdefs::{PartitionId, PartitionType};
-use crate::resource::resource_package::{
-    ChunkType, PackageHeader, PackageMetadata, PackageOffsetFlags, PackageOffsetInfo,
-    PackageVersion, ResourceHeader, ResourcePackage, ResourcePackageSource,
-    ResourceReferenceCountAndFlags, ResourceReferenceFlags,
-};
+use crate::resource::resource_package::{ChunkType, PackageHeader, PackageMetadata, PackageOffsetFlags, PackageOffsetInfo, PackageVersion, ResourceHeader, ResourcePackage, ResourcePackageDataSource, ResourcePackageSource, ResourceReferenceCountAndFlags, ResourceReferenceFlags};
 use crate::resource::resource_partition::PatchId;
 use crate::resource::runtime_resource_id::RuntimeResourceID;
-use crate::{GlacierResource, GlacierResourceError, WoaVersion};
+use crate::{GlacierResource, GlacierResourceError, GlacierGame, WoaGame};
 use binrw::BinWrite;
 use binrw::__private::Required;
 use binrw::io::Cursor;
@@ -329,7 +325,7 @@ impl PackageResourceBuilder {
     pub fn from_glacier_resource<G: GlacierResource>(
         rrid: RuntimeResourceID,
         glacier_resource: &G,
-        woa_version: WoaVersion
+        woa_version: GlacierGame
     ) -> Result<Self, PackageResourceBuilderError> {
         let system_memory_requirement = glacier_resource.system_memory_requirement();
         let video_memory_requirement = glacier_resource.video_memory_requirement();
@@ -423,6 +419,7 @@ pub struct PackageBuilder {
     partition_id: PartitionId,
     patch_id: PatchId,
     use_legacy_references: bool,
+    game_version: GlacierGame,
     resources: IndexMap<RuntimeResourceID, PackageResourceBuilder>,
     unneeded_resources: IndexSet<RuntimeResourceID>,
 }
@@ -437,6 +434,15 @@ pub enum PackageBuilderError {
 
     #[error("Unneeded resources are only supported when building a patch package")]
     UnneededResourcesNotSupported,
+
+    #[error("Building of legacy packages is not supported")]
+    LegacyPackageNotSupported,
+    
+    #[error("Legacy flag format is not supported by {0}")]
+    LegacyFlagsNotSupported(GlacierGame),
+
+    #[error("Package version {0:?} not supported by {1}")]
+    PackageVersionNotSupported(PackageVersion, GlacierGame),
 
     #[error("Building patch but no patch ID was provided")]
     NoPatchId,
@@ -503,7 +509,7 @@ impl PackageBuilder {
     /// # Arguments
     /// * `chunk_id` - The chunk ID of the package. e.g. chunk0
     /// * `chunk_type` - The chunk type of the package.
-    pub fn new(chunk_id: u8, chunk_type: ChunkType) -> Self {
+    pub fn new(chunk_id: u8, chunk_type: ChunkType, game_version: GlacierGame) -> Self {
         Self {
             partition_id: PartitionId {
                 part_type: match chunk_type {
@@ -513,6 +519,7 @@ impl PackageBuilder {
                 index: chunk_id as usize,
             },
             use_legacy_references: false,
+            game_version,
             patch_id: PatchId::Base,
             resources: IndexMap::new(),
             unneeded_resources: IndexSet::new(),
@@ -524,11 +531,12 @@ impl PackageBuilder {
     /// # Arguments
     /// * `partition_id` - The partition id of the package.
     /// * `patch_id` - The patch id of the package.
-    pub fn new_with_patch_id(partition_id: PartitionId, patch_id: PatchId) -> Self {
+    pub fn new_with_patch_id(partition_id: PartitionId, patch_id: PatchId, game_version: GlacierGame) -> Self {
         Self {
             partition_id,
             patch_id,
             use_legacy_references: false,
+            game_version,
             resources: IndexMap::new(),
             unneeded_resources: IndexSet::new(),
         }
@@ -541,10 +549,7 @@ impl PackageBuilder {
     pub fn from_resource_package(
         resource_package: &ResourcePackage,
     ) -> Result<Self, PackageBuilderError> {
-        let source = resource_package
-            .source
-            .as_ref()
-            .ok_or(PackageBuilderError::NoSource)?;
+        let source = &resource_package.source;
 
         let mut package = Self {
             partition_id: PartitionId {
@@ -573,13 +578,14 @@ impl PackageBuilder {
                 x => PatchId::Patch(x as usize),
             },
             use_legacy_references: false,
+            game_version: source.game,
             resources: IndexMap::new(),
             unneeded_resources: IndexSet::new(),
         };
 
         for (rrid, resource) in &resource_package.resources {
-            let mut builder = match source {
-                ResourcePackageSource::File(source_path) => {
+            let mut builder = match &source.data {
+                ResourcePackageDataSource::File(source_path) => {
                     PackageResourceBuilder::from_file_at_offset(
                         *rrid,
                         &resource.data_type(),
@@ -592,7 +598,7 @@ impl PackageBuilder {
                     .map_err(|e| PackageBuilderError::CannotDuplicateResource(*rrid, e))?
                 }
 
-                ResourcePackageSource::Memory(source_data) => {
+                ResourcePackageDataSource::Memory(source_data) => {
                     let read_size = resource
                         .compressed_size()
                         .unwrap_or(resource.header.data_size);
@@ -614,7 +620,8 @@ impl PackageBuilder {
                         resource.is_scrambled(),
                     )
                     .map_err(|e| PackageBuilderError::CannotDuplicateResource(*rrid, e))?
-                }
+                },
+                &ResourcePackageDataSource::None => Err(PackageBuilderError::NoSource)?
             };
 
             builder.with_memory_requirements(
@@ -645,6 +652,12 @@ impl PackageBuilder {
     /// Sets the patch ID of the package.
     pub fn with_patch_id(&mut self, patch_id: &PatchId) -> &mut Self {
         self.patch_id = *patch_id;
+        self
+    }
+
+    /// Sets game version
+    pub fn with_game_version(&mut self, game_version: GlacierGame) -> &mut Self {
+        self.game_version = game_version;
         self
     }
 
@@ -713,19 +726,30 @@ impl PackageBuilder {
     where
         for<'a> T::Args<'a>: Required,
     {
+        Self::backpatch_le_args(writer, patch_offset, data, T::Args::args())
+    }
+
+    fn backpatch_le_args<W: Write + Seek, T: BinWrite + WriteEndian>(
+        writer: &mut W,
+        patch_offset: u64,
+        data: &T,
+        args: T::Args<'_>,
+    ) -> Result<(), PackageBuilderError>
+    {
         let current_offset = writer
             .stream_position()
             .map_err(PackageBuilderError::IoError)?;
         writer
             .seek(io::SeekFrom::Start(patch_offset))
             .map_err(PackageBuilderError::IoError)?;
-        data.write(writer)
+        data.write_le_args(writer, args)
             .map_err(PackageBuilderError::SerializationError)?;
         writer
             .seek(io::SeekFrom::Start(current_offset))
             .map_err(PackageBuilderError::IoError)?;
         Ok(())
     }
+
 
     /// Writes the offset table to the given writer.
     fn write_offset_table<W: Write + Seek>(
@@ -791,7 +815,6 @@ impl PackageBuilder {
             let mut resource_metadata = ResourceHeader {
                 resource_type: resource.resource_type,
                 references_chunk_size: 0,
-                states_chunk_size: 0,
                 data_size: resource.blob.size(),
                 system_memory_requirement: resource.system_memory_requirement,
                 video_memory_requirement: resource.video_memory_requirement,
@@ -799,7 +822,7 @@ impl PackageBuilder {
             };
 
             resource_metadata
-                .write(writer)
+                .write_le_args(writer, (self.game_version,))
                 .map_err(PackageBuilderError::SerializationError)?;
 
             // Write the references table if there are any.
@@ -856,7 +879,7 @@ impl PackageBuilder {
 
                 // Calculate the size and patch the metadata.
                 resource_metadata.references_chunk_size = reference_table_size as u32;
-                PackageBuilder::backpatch(writer, metadata_offset, &resource_metadata)?;
+                PackageBuilder::backpatch_le_args(writer, metadata_offset, &resource_metadata, (self.game_version,))?;
             }
         }
 
@@ -886,9 +909,36 @@ impl PackageBuilder {
             return Err(PackageBuilderError::UnneededResourcesNotSupported);
         }
 
+        if matches!(self.game_version, GlacierGame::Legacy(_)){
+            return Err(PackageBuilderError::LegacyPackageNotSupported);
+        }
+        
+        let allowed_rpkg_version = match (version, self.game_version) {
+            (PackageVersion::RPKGv1, GlacierGame::Legacy(_)) => true,
+            (PackageVersion::RPKGv1, GlacierGame::Woa(_)) => true,
+            (PackageVersion::RPKGv1, _) => false,
+            (PackageVersion::RPKGv2, GlacierGame::Woa(WoaGame::HM3)) => true,
+            (PackageVersion::RPKGv2, GlacierGame::Knt) => true,
+            (PackageVersion::RPKGv2, _) => false,
+        };
+
+        if !allowed_rpkg_version {
+            return Err(PackageBuilderError::PackageVersionNotSupported(version, self.game_version));
+        }
+
+        let legacy_flags_supported = matches!(self.game_version, GlacierGame::Legacy(_) | GlacierGame::Woa(WoaGame::HM2016));
+        if self.use_legacy_references && !legacy_flags_supported {
+            return Err(PackageBuilderError::LegacyFlagsNotSupported(
+                self.game_version,
+            ));
+        }
+
         // First create a base header. We'll fill it and patch it later.
         let mut header = ResourcePackage {
-            source: None,
+            source: ResourcePackageSource{
+                data: ResourcePackageDataSource::None,
+                game: self.game_version,
+            },
             magic: match version {
                 PackageVersion::RPKGv1 => *b"GKPR",
                 PackageVersion::RPKGv2 => *b"2KPR",
@@ -1088,15 +1138,6 @@ impl PackageBuilder {
         Ok(())
     }
 
-    #[deprecated(since = "1.1.1", note = "use `build_to_file` instead")]
-    pub fn build(
-        self,
-        version: PackageVersion,
-        output_path: &Path,
-    ) -> Result<(), PackageBuilderError> {
-        self.build_to_file(version, output_path)
-    }
-
     /// Builds the package for the given version and writes it to the given writer.
     ///
     /// # Arguments
@@ -1123,11 +1164,6 @@ impl PackageBuilder {
         let result = self.build_internal(version, &mut writer);
         writer.flush()?;
         result
-    }
-
-    #[deprecated(since = "1.1.1", note = "use `build_to_vec` instead")]
-    pub fn build_in_memory(self, version: PackageVersion) -> Result<Vec<u8>, PackageBuilderError> {
-        self.build_to_vec(version)
     }
 
     /// Builds the package for the given version and returns it as a byte vector.

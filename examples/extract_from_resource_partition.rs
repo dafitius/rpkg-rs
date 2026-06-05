@@ -5,6 +5,7 @@ use rpkg_rs::resource::runtime_resource_id::{PlatformTag, RuntimeResourceID};
 use std::env;
 use std::path::PathBuf;
 use std::str::FromStr;
+use rpkg_rs::{GlacierGame, WoaGame};
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -28,7 +29,7 @@ fn main() {
         std::process::exit(0)
     });
 
-    let mut partition = ResourcePartition::new(partition_info);
+    let mut partition = ResourcePartition::new(partition_info, GlacierGame::Woa(WoaGame::HM3));
     print!("Mounting partition {} ", &partition.partition_info().id);
 
     partition

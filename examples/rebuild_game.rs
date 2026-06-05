@@ -1,8 +1,8 @@
 use md5::{Digest, Md5};
 use rpkg_rs::resource::package_builder::PackageBuilder;
 use rpkg_rs::resource::partition_manager::PartitionManager;
-use rpkg_rs::resource::resource_package::ResourcePackageSource;
-use rpkg_rs::WoaVersion;
+use rpkg_rs::resource::resource_package::{ResourcePackageDataSource, ResourcePackageSource};
+use rpkg_rs::{GlacierGame, WoaGame};
 use std::path::PathBuf;
 use std::{env, fs, io};
 
@@ -17,9 +17,9 @@ fn main() {
     let retail_path = PathBuf::from(&args[1]);
 
     let game_version = match args[2].as_str() {
-        "HM2016" => WoaVersion::HM2016,
-        "HM2" => WoaVersion::HM2,
-        "HM3" => WoaVersion::HM3,
+        "HM2016" => GlacierGame::Woa(WoaGame::HM2016),
+        "HM2" => GlacierGame::Woa(WoaGame::HM2),
+        "HM3" => GlacierGame::Woa(WoaGame::HM3),
         e => {
             eprintln!("invalid game version: {}", e);
             std::process::exit(0);
@@ -74,8 +74,8 @@ fn main() {
                 });
 
             // After it's built, check if the generated file is the same as the original.
-            let original_file = match &package.source() {
-                Some(ResourcePackageSource::File(path)) => path,
+            let original_file = match &package.source().data {
+                ResourcePackageDataSource::File(path) => path,
                 _ => panic!(
                     "Package '{}' of game '{:?}' has no source",
                     output_name, game_version

@@ -148,17 +148,8 @@ impl ResourceID {
     }
 
     /// Get the resource path.
-    /// Will append the platform tag
-    #[deprecated(
-        since = "1.4.0",
-        note = "Use resource_path_with_platform(\"pc\") instead \
-        resource_path() is not platform_agnostic and will always append the pc platform tag. \
-        This function will be made platform agnostic in an upcoming release \
-        Use uri() for the platform-agnostic form or resource_path_with_platform(...) for a platform specific form.\
-        "
-    )]
     pub fn resource_path(&self) -> String {
-        self.resource_path_with_platform("pc")
+        String::from(&self.uri)
     }
 
     pub fn uri(&self) -> &str {
@@ -291,14 +282,8 @@ impl ResourceID {
         }
     }
 
-    #[deprecated(
-        since = "1.4.0",
-        note = "into_rrid() hashes the ResourceID using PlatformTag::None. \
-        Use into_rrid_with_platform(..., ..., PlatformTag::None) instead. \
-        In a future release `into_rrid()` will require a runtime platform tag."
-    )]
-    pub fn into_rrid(self) -> RuntimeResourceID {
-        RuntimeResourceID::from_resource_id_with_platform(&self, "", PlatformTag::None)
+    pub fn into_rrid(self, runtime_platform: PlatformTag) -> RuntimeResourceID {
+        RuntimeResourceID::from_resource_id_with_platform(&self, "", runtime_platform)
     }
 
     pub fn into_rrid_with_platform(self, resource_platform: &str, runtime_platform: PlatformTag) -> RuntimeResourceID {

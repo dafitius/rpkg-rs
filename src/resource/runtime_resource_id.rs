@@ -80,7 +80,6 @@ impl From<RuntimeResourceID> for u64 {
     }
 }
 
-#[allow(deprecated)]
 impl From<ResourceID> for RuntimeResourceID {
     fn from(value: ResourceID) -> Self {
         Self::from_resource_id(&value)
@@ -107,14 +106,8 @@ impl RuntimeResourceID {
     }
 
     /// Create RuntimeResourceID from ResourceID
-    #[deprecated(
-        since = "1.4.0",
-        note = "from_resource_id() hashes the ResourceID using the PC platform and is not platform-agnostic. \
-        Use from_resource_id_with_platform(..., \"pc\", ...) instead. \
-        In a future release `from_resource_id()` will hash the platform-agnostic ResourceID form by default."
-    )]
     pub fn from_resource_id(rid: &ResourceID) -> Self {
-        Self::from_raw_string(&rid.resource_path_with_platform("pc"))
+        Self::from_raw_string(&rid.resource_path())
     }
 
     /// Create a RuntimeResourceID from a ResourceID.

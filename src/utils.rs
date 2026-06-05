@@ -1,6 +1,6 @@
 use std::ffi::OsString;
 use std::fs;
-use std::path::{Component, Path, PathBuf};
+use std::path::Path;
 
 pub(crate) fn read_file_names(path: &Path) -> Vec<OsString> {
     match fs::read_dir(path) {
@@ -13,33 +13,6 @@ pub(crate) fn read_file_names(path: &Path) -> Vec<OsString> {
             vec![]
         }
     }
-}
-
-pub(crate) fn normalize_path(path: &Path) -> PathBuf {
-    let mut components = path.components().peekable();
-    let mut ret = if let Some(c @ Component::Prefix(..)) = components.peek().cloned() {
-        components.next();
-        PathBuf::from(c.as_os_str())
-    } else {
-        PathBuf::new()
-    };
-
-    for component in components {
-        match component {
-            Component::Prefix(..) => unreachable!(),
-            Component::RootDir => {
-                ret.push(component.as_os_str());
-            }
-            Component::CurDir => {}
-            Component::ParentDir => {
-                ret.pop();
-            }
-            Component::Normal(c) => {
-                ret.push(c);
-            }
-        }
-    }
-    ret
 }
 
 pub(crate) fn uppercase_first_letter(s: &str) -> String {

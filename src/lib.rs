@@ -11,43 +11,62 @@
 //!
 //! rpkg-rs aims to streamline the process of working with Hitman game resources, offering a robust set of features to read ResourcePackage files.
 
+use std::fmt::{Display, Formatter};
+use glacier_base::encryption::xtea::XteaConfig;
 use thiserror::Error;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-pub mod encryption;
 pub mod misc;
 pub mod resource;
 pub(crate) mod utils;
 
+pub use resource::legacy::LegacyGame;
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
+pub enum WoaGame {
+    HM2016,
+    HM2,
+    HM3
+}
 
 #[non_exhaustive]
 #[derive(Debug, PartialEq, Clone, Copy)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub enum GlacierGame {
-    HM2016,
-    HM2,
-    HM3,
-    Bond,
+    Legacy(LegacyGame),
+    Woa(WoaGame),
+    Knt
 }
 
-impl From<WoaVersion> for GlacierGame {
-    fn from(version: WoaVersion) -> Self {
-        match version {
-            WoaVersion::HM2016 => GlacierGame::HM2016,
-            WoaVersion::HM2 => GlacierGame::HM2,
-            WoaVersion::HM3 => GlacierGame::HM3,
+impl From<GlacierGame> for XteaConfig{
+    fn from(value: GlacierGame) -> Self {
+        match value {
+            GlacierGame::Legacy(_) => {XteaConfig::Woa}
+            GlacierGame::Woa(_) => {XteaConfig::Woa}
+            GlacierGame::Knt => {XteaConfig::Knt}
         }
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
-#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-pub enum WoaVersion {
-    HM2016,
-    HM2,
-    HM3,
+impl Display for GlacierGame {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("{}", match self {
+            GlacierGame::Legacy(game) => {match game {
+                LegacyGame::CL482338 => {"Hitman Alpha cl482338"}
+                LegacyGame::CL534170 => {"Hitman Alpha cl534170"}
+                LegacyGame::CL535848 => {"Hitman Alpha cl535848"}
+            }}
+            GlacierGame::Woa(game) => {match game {
+                WoaGame::HM2016 => {"Hitman 1"}
+                WoaGame::HM2 => {"Hitman 2"}
+                WoaGame::HM3 => {"Hitman 3"}
+            }}
+            GlacierGame::Knt => {"007: First Light"}
+        }))
+    }
 }
 
 #[derive(Debug, Error)]
@@ -65,11 +84,11 @@ pub enum GlacierResourceError {
 pub trait GlacierResource: Sized {
     type Output;
     fn process_data<R: AsRef<[u8]>>(
-        woa_version: WoaVersion,
+        glacier_game: GlacierGame,
         data: R,
     ) -> Result<Self::Output, GlacierResourceError>;
 
-    fn serialize(&self, woa_version: WoaVersion) -> Result<Vec<u8>, GlacierResourceError>;
+    fn serialize(&self, woa_version: GlacierGame) -> Result<Vec<u8>, GlacierResourceError>;
 
     fn resource_type() -> [u8; 4];
     fn video_memory_requirement(&self) -> u64;

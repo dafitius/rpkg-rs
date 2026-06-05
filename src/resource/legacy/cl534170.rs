@@ -7,15 +7,18 @@ use std::io::{Cursor};
 use std::iter::zip;
 use std::path::Path;
 use std::{fmt};
-use crate::resource::resource_package::{PackageHeader, PackageOffsetFlags, ResourceHeader, ResourcePackageError, ResourcePackageSource};
+use crate::GlacierGame;
+use crate::resource::legacy::LegacyGame;
+use crate::resource::resource_package::{PackageHeader, PackageOffsetFlags, ResourceHeader, ResourcePackageDataSource, ResourcePackageError, ResourcePackageSource};
 use crate::resource::runtime_resource_id::RuntimeResourceID;
 
 #[allow(dead_code)]
 #[binread]
 #[brw(little)]
 pub struct ResourcePackage {
-    #[br(ignore)]
-    pub(crate) source: Option<ResourcePackageSource>,
+    #[bw(ignore)]
+    #[br(calc=ResourcePackageDataSource::None)]
+    pub(crate) source: ResourcePackageDataSource,
 
     pub(crate) magic: [u8; 4],
     padding: [u32; 6],
@@ -35,7 +38,7 @@ fn resource_parser(file_count: u32) -> BinResult<IndexMap<RuntimeResourceID, Res
 
     let mut resource_metadata = vec![];
     for _ in 0..file_count {
-        resource_metadata.push(ResourceHeader::read_options(reader, endian, (true,))?);
+        resource_metadata.push(ResourceHeader::read_options(reader, endian, (GlacierGame::Legacy(LegacyGame::CL534170),))?);
     }
 
     let resources = zip(resource_entries, resource_metadata)
@@ -65,7 +68,7 @@ impl ResourcePackage {
             .read_ne_args::<ResourcePackage>(())
             .map_err(ResourcePackageError::ParsingError)?;
 
-        package.source = Some(ResourcePackageSource::File(package_path.to_path_buf()));
+        package.source = ResourcePackageDataSource::File(package_path.to_path_buf());
 
         Ok(package)
     }
@@ -80,7 +83,7 @@ impl ResourcePackage {
             .read_ne_args::<ResourcePackage>(())
             .map_err(ResourcePackageError::ParsingError)?;
 
-        package.source = Some(ResourcePackageSource::Memory(data));
+        package.source = ResourcePackageDataSource::Memory(data);
         Ok(package)
     }
 }
@@ -118,7 +121,10 @@ impl fmt::Display for PackageOffsetInfo {
 impl From<ResourcePackage> for crate::resource::resource_package::ResourcePackage {
     fn from(value: ResourcePackage) -> Self {
         Self{
-            source: value.source,
+            source: ResourcePackageSource{
+                data: value.source,
+                game: GlacierGame::Legacy(LegacyGame::CL534170),
+            },
             magic: value.magic,
             metadata: None,
             header: value.header,

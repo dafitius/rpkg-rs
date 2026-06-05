@@ -7,12 +7,12 @@ use itertools::Itertools;
 use lzzzz::lz4;
 use memmap2::Mmap;
 use std::fs::File;
-use std::io::{Cursor, Read, Seek, SeekFrom};
+use std::io::{Cursor, Read, Seek};
 use std::iter::zip;
 use std::path::{Path, PathBuf};
 use std::{fmt, io};
 use thiserror::Error;
-
+use crate::GlacierGame;
 use crate::resource::runtime_resource_id::RuntimeResourceID;
 
 #[derive(Debug, Error)]
@@ -33,15 +33,22 @@ pub enum ResourcePackageError {
     Lz4DecompressionError(#[from] lzzzz::Error),
 }
 
-pub enum ResourcePackageSource {
+pub enum ResourcePackageDataSource {
     File(PathBuf),
     Memory(Vec<u8>),
+    None,
+}
+
+pub struct ResourcePackageSource {
+    pub data: ResourcePackageDataSource,
+    pub game: GlacierGame
 }
 
 /// The version of the package.
 ///
 /// `RPKGv1` is the original version of the package format used in Hitman 2016 and Hitman 2.
 /// `RPKGv2` is the updated version of the package format used in Hitman 3.
+#[derive(Debug, Copy, Clone)]
 pub enum PackageVersion {
     RPKGv1,
     RPKGv2,
@@ -49,10 +56,12 @@ pub enum PackageVersion {
 
 #[allow(dead_code)]
 #[binrw]
-#[brw(little, import(is_patch: bool))]
+#[bw(little, import(is_patch: bool))]
+#[br(little, import(is_patch: bool, source: ResourcePackageSource))]
 pub struct ResourcePackage {
-    #[brw(ignore)]
-    pub(crate) source: Option<ResourcePackageSource>,
+    #[br(calc=source)]
+    #[bw(ignore)]
+    pub(crate) source: ResourcePackageSource,
 
     pub(crate) magic: [u8; 4],
 
@@ -74,30 +83,22 @@ pub struct ResourcePackage {
     })]
     pub(crate) unneeded_resources: Option<Vec<RuntimeResourceID>>,
 
-    #[br(parse_with = resource_parser, args(header.file_count))]
+    #[br(parse_with = resource_parser, args(header.file_count, source.game))]
     #[bw(write_with = empty_writer)]
     pub(crate) resources: IndexMap<RuntimeResourceID, ResourceInfo>,
 }
 
 #[parser(reader: reader, endian)]
-fn resource_parser(file_count: u32) -> BinResult<IndexMap<RuntimeResourceID, ResourceInfo>> {
+fn resource_parser(file_count: u32, game_version: GlacierGame) -> BinResult<IndexMap<RuntimeResourceID, ResourceInfo>> {
     let mut map = IndexMap::new();
     let mut resource_entries = vec![];
     for _ in 0..file_count {
         resource_entries.push(PackageOffsetInfo::read_options(reader, endian, ())?);
     }
 
-    let position = reader.stream_position()?;
-    let has_states_size = !(0..file_count).any(|_|{
-        if let Ok(probe) = ResourceHeaderProbe::read_options(reader, endian, ()){
-            probe.states_chunk_size != 0 || (!probe.resource_type.is_ascii())
-        } else { true }
-    });
-
-    reader.seek(SeekFrom::Start(position))?;
     let mut resource_metadata = vec![];
     for _ in 0..file_count {
-        resource_metadata.push(ResourceHeader::read_options(reader, endian, (has_states_size,))?);
+        resource_metadata.push(ResourceHeader::read_options(reader, endian, (game_version,))?);
     }
 
     let resources = zip(resource_entries, resource_metadata)
@@ -116,7 +117,7 @@ impl ResourcePackage {
     ///
     /// # Arguments
     /// * `package_path` - The path to the file to parse.
-    pub fn from_file<P: AsRef<Path> + Copy>(package_path: P) -> Result<Self, ResourcePackageError> {
+    pub fn from_file<P: AsRef<Path> + Copy>(package_path: P, glacier_game: GlacierGame) -> Result<Self, ResourcePackageError> {
         let file = File::open(package_path).map_err(ResourcePackageError::IoError)?;
         let mmap = unsafe { Mmap::map(&file).map_err(ResourcePackageError::IoError)? };
         let mut reader = Cursor::new(&mmap[..]);
@@ -129,13 +130,18 @@ impl ResourcePackage {
             .map(|s| s.contains("patch"))
             .unwrap_or(false);
 
-        let mut package = reader
-            .read_ne_args::<ResourcePackage>((is_patch,))
-            .map_err(ResourcePackageError::ParsingError)?;
+        let source = ResourcePackageSource{
+            data: ResourcePackageDataSource::File(package_path.to_path_buf()),
+            game: glacier_game,
+        };
 
-        package.source = Some(ResourcePackageSource::File(package_path.to_path_buf()));
+        if let GlacierGame::Legacy(legacy_game) = glacier_game {
+            return crate::resource::legacy::read_package_from_file(legacy_game, package_path)
+        }
 
-        Ok(package)
+        reader
+            .read_ne_args::<ResourcePackage>((is_patch,source))
+            .map_err(ResourcePackageError::ParsingError)
     }
 
     /// Parses a ResourcePackage from a memory buffer.
@@ -143,15 +149,23 @@ impl ResourcePackage {
     /// # Arguments
     /// * `data` - The data to parse.
     /// * `is_patch` - Whether the package is a patch package.
-    pub fn from_memory(data: Vec<u8>, is_patch: bool) -> Result<Self, ResourcePackageError> {
+    pub fn from_memory(data: Vec<u8>, is_patch: bool, glacier_game: GlacierGame) -> Result<Self, ResourcePackageError> {
         let mut reader = Cursor::new(&data);
-        let mut package = reader
-            .read_ne_args::<ResourcePackage>((is_patch,))
-            .map_err(ResourcePackageError::ParsingError)?;
+        let source = ResourcePackageSource{
+            data: ResourcePackageDataSource::None,
+            game: glacier_game,
+        };
 
-        package.source = Some(ResourcePackageSource::Memory(data));
+        if let GlacierGame::Legacy(legacy_game) = glacier_game {
+            return crate::resource::legacy::read_package_from_memory(legacy_game, data)
+        }
 
-        Ok(package)
+        reader
+            .read_ne_args::<ResourcePackage>((is_patch,source)).map(|mut pck| {
+            pck.source.data = ResourcePackageDataSource::Memory(data);
+            pck
+        })
+            .map_err(ResourcePackageError::ParsingError)
     }
 
     /// Returns the version of the package.
@@ -164,8 +178,8 @@ impl ResourcePackage {
     }
 
     /// Returns the source of the package.
-    pub fn source(&self) -> Option<&ResourcePackageSource> {
-        self.source.as_ref()
+    pub fn source(&self) -> &ResourcePackageSource {
+        &self.source
     }
 
     /// Returns a map of the RuntimeResourceIds and their resource information.
@@ -223,8 +237,8 @@ impl ResourcePackage {
         let is_scrambled = resource.is_scrambled();
 
         // Extract the resource bytes from the resourcePackage
-        let mut buffer = match &self.source {
-            Some(ResourcePackageSource::File(package_path)) => {
+        let mut buffer = match &self.source.data {
+            ResourcePackageDataSource::File(package_path) => {
                 let mut file = File::open(package_path).map_err(ResourcePackageError::IoError)?;
                 file.seek(io::SeekFrom::Start(resource.entry.data_offset))
                     .map_err(ResourcePackageError::IoError)?;
@@ -235,13 +249,15 @@ impl ResourcePackage {
                 buffer
             }
 
-            Some(ResourcePackageSource::Memory(data)) => {
+            ResourcePackageDataSource::Memory(data) => {
                 let start_offset = resource.entry.data_offset as usize;
                 let end_offset = start_offset + final_size as usize;
                 data[start_offset..end_offset].to_vec()
             }
 
-            None => return Err(ResourcePackageError::NoSource),
+            ResourcePackageDataSource::None => {
+                Err(ResourcePackageError::NoSource)?
+            }
         };
 
         if is_scrambled {
@@ -324,14 +340,13 @@ impl PackageOffsetInfo {
 #[derive(Clone, PartialEq, Eq)]
 #[binrw]
 #[brw(little)]
-#[br(import(has_states_size: bool))]
+#[brw(import(game_version: GlacierGame))]
 pub struct ResourceHeader {
     pub(crate) resource_type: [u8; 4],
     pub(crate) references_chunk_size: u32,
-    #[br(calc=0)]
-    pub(crate) states_chunk_size: u32,
 
-    #[br(pad_before(if has_states_size {4} else {0}))]
+    //In the woa games we have a field called states_chunk_size here, it's unused and not present in knt
+    #[brw(pad_before(if matches!(game_version, GlacierGame::Knt) {0} else {4}))]
     pub(crate) data_size: u32,
     pub(crate) system_memory_requirement: u32,
     pub(crate) video_memory_requirement: u32,

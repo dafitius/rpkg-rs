@@ -1,16 +1,16 @@
 use itertools::Itertools;
-use std::io::{stdin, Write};
-use std::path::PathBuf;
-use std::str::FromStr;
-use std::{env, io};
-
 use rpkg_rs::misc::resource_id::ResourceID;
 use rpkg_rs::resource::partition_manager::{PartitionManager, PartitionState};
 use rpkg_rs::resource::pdefs::{GamePaths, PackageDefinitionSource};
 use rpkg_rs::resource::resource_info::ResourceInfo;
 use rpkg_rs::resource::resource_partition::PatchId;
 use rpkg_rs::resource::runtime_resource_id::{PlatformTag, RuntimeResourceID};
-use rpkg_rs::WoaVersion;
+use rpkg_rs::{GlacierGame, LegacyGame, WoaGame};
+use std::cell::Cell;
+use std::io::{stdin, Write};
+use std::path::PathBuf;
+use std::str::FromStr;
+use std::{env, io};
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -23,9 +23,11 @@ fn main() {
     let retail_path = PathBuf::from(&args[1]);
 
     let game_version = match args[2].as_str() {
-        "HM2016" => WoaVersion::HM2016,
-        "HM2" => WoaVersion::HM2,
-        "HM3" => WoaVersion::HM3,
+        "ALPHA" => GlacierGame::Legacy(LegacyGame::CL535848),
+        "HM2016" => GlacierGame::Woa(WoaGame::HM2016),
+        "HM2" => GlacierGame::Woa(WoaGame::HM2),
+        "HM3" => GlacierGame::Woa(WoaGame::HM3),
+        "KNT" => GlacierGame::Knt,
         e => {
             eprintln!("invalid game version: {}", e);
             std::process::exit(0);
@@ -33,18 +35,31 @@ fn main() {
     };
 
     // Discover the game paths.
-    let game_paths = GamePaths::from_retail_directory(retail_path.clone()).unwrap_or_else(|e| {
-        eprintln!("failed to discover game paths: {}", e);
-        std::process::exit(0);
-    });
+    let game_paths = match game_version{
+        GlacierGame::Legacy(_) => GamePaths {
+            project_path: retail_path.clone(),
+            runtime_path: retail_path.clone(),
+            package_definition_path: PathBuf::new(),
+        },
+
+        _ => {
+            GamePaths::from_retail_directory(retail_path.clone(), game_version.into()).unwrap_or_else(|e| {
+                eprintln!("failed to discover game paths: {}", e);
+                std::process::exit(0);
+            })
+        }
+    };
 
     // Read and parse the package definition.
-    let package_definition_source =
-        PackageDefinitionSource::from_file(game_paths.package_definition_path, game_version)
-            .unwrap_or_else(|e| {
+    let package_definition_source = match game_version {
+        GlacierGame::Legacy(version) => PackageDefinitionSource::for_legacy(version),
+        _ => {
+            PackageDefinitionSource::from_file(game_paths.package_definition_path, game_version).unwrap_or_else(|e| {
                 eprintln!("failed to parse package definition: {}", e);
                 std::process::exit(0);
-            });
+            })
+        }
+    };
 
     let mut partition_infos = package_definition_source.read().unwrap_or_else(|e| {
         eprintln!("failed to read package definition: {}", e);
@@ -57,7 +72,7 @@ fn main() {
     }
 
     let mut package_manager =
-        PartitionManager::new(game_paths.runtime_path, &package_definition_source).unwrap_or_else(
+        PartitionManager::new(game_paths.runtime_path, game_version, &package_definition_source).unwrap_or_else(
             |e| {
                 eprintln!("failed to init package manager: {}", e);
                 std::process::exit(0);
@@ -65,27 +80,33 @@ fn main() {
         );
 
     //read the packagedefs here
-    let mut last_index = 0;
-    let mut progress = 0.0;
+
+    let last_index = Cell::new(0usize);
+    let progress = Cell::new(0.0f32);
+
     let progress_callback = |current, state: &PartitionState| {
-        if current != last_index {
-            last_index = current;
+        if current != last_index.get() {
+            last_index.set(current);
             print!("Mounting partition {} ", current);
         }
+
         if !state.installing && !state.mounted {
             println!("[Failed to mount this partition. Is it installed?]");
         }
+
         let install_progress = (state.install_progress * 10.0).ceil() / 10.0;
 
-        let chars_to_add = (install_progress * 10.0 - progress * 10.0) as usize * 2;
+        let prev_progress = progress.get();
+        let chars_to_add = ((install_progress * 10.0 - prev_progress * 10.0) as usize) * 2;
         let chars_to_add = std::cmp::min(chars_to_add, 20);
+
         print!("{}", "█".repeat(chars_to_add));
         io::stdout().flush().unwrap();
 
-        progress = install_progress;
+        progress.set(install_progress);
 
-        if progress == 1.0 {
-            progress = 0.0;
+        if progress.get() == 1.0 {
+            progress.set(0.0);
 
             if state.mounted {
                 println!(" done :)");
@@ -94,7 +115,6 @@ fn main() {
             }
         }
     };
-
     package_manager
         .mount_partitions(progress_callback)
         .unwrap_or_else(|e| {
@@ -112,10 +132,10 @@ fn main() {
             .ok()
             .expect("Failed to read line");
 
-        let rid = ResourceID::from_str(input_string.as_str()).unwrap_or_else(|_| {
+        let Ok(rid) = ResourceID::from_str(input_string.as_str()) else {
             println!("Given ResourceID is invalid");
-            std::process::exit(0)
-        });
+            continue
+        };
 
         let rrid = RuntimeResourceID::from_resource_id_with_platform(&rid, "pc", PlatformTag::None);
         println!("Try to find {}", rrid);

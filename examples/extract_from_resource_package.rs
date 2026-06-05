@@ -1,10 +1,17 @@
-use clap::{Arg, Command};
+use clap::{Arg, Command, ValueEnum};
 use rpkg_rs::misc::resource_id::ResourceID;
-use rpkg_rs::resource::legacy::Format;
 use rpkg_rs::resource::resource_package::ResourcePackage;
 use rpkg_rs::resource::runtime_resource_id::{PlatformTag, RuntimeResourceID};
 use std::path::PathBuf;
 use std::str::FromStr;
+use rpkg_rs::{GlacierGame, LegacyGame, WoaGame};
+
+#[derive(Clone, ValueEnum)]
+enum SupportedGames {
+    HitmanAlpha,
+    Hitman,
+    Knt,
+}
 
 fn main() {
     let matches = Command::new("Extract from rpkg example")
@@ -21,34 +28,36 @@ fn main() {
                 .required(true),
         )
         .arg(
-            Arg::new("legacy")
-                .help("Read legacy resource content")
-                .long("legacy")
-                .short('l')
-                .action(clap::ArgAction::SetTrue),
+            Arg::new("game")
+                .help("The Glacier game to extract as")
+                .required(true)
+                .value_parser(clap::value_parser!(SupportedGames)),
         )
         .get_matches();
 
     let package_path: PathBuf = matches.get_one::<PathBuf>("package").unwrap().clone();
     let rid_str = matches.get_one::<String>("resource_id").unwrap();
-    let legacy = *matches.get_one::<bool>("legacy").unwrap_or(&false);
+    let game = matches.get_one::<SupportedGames>("game").unwrap();
 
     let rid = ResourceID::from_str(rid_str).unwrap_or_else(|_| {
         println!("Given ResourceID is invalid");
         std::process::exit(1)
     });
 
-    let rrid: RuntimeResourceID = RuntimeResourceID::from_resource_id_with_platform(&rid, "pc", PlatformTag::None);
+    let glacier_game = match game {
+        SupportedGames::HitmanAlpha => {GlacierGame::Legacy(LegacyGame::CL535848)}
+        SupportedGames::Hitman => {GlacierGame::Woa(WoaGame::HM2)}
+        SupportedGames::Knt => {GlacierGame::Knt}
+    };
+
+    let rrid: RuntimeResourceID = match glacier_game{
+        GlacierGame::Legacy(_) |
+        GlacierGame::Woa(_) => RuntimeResourceID::from_resource_id_with_platform(&rid, "pc", PlatformTag::None),
+        _ => RuntimeResourceID::from_resource_id_with_platform(&rid, "", PlatformTag::Pc)
+    };
 
     println!("Parsing the resource package at {}", package_path.display());
-    let rpkg = if !legacy {
-        ResourcePackage::from_file(&package_path)
-    } else {
-        rpkg_rs::resource::legacy::read_package_from_file(
-            Format::CL535848,
-            package_path,
-        )
-    }
+    let rpkg = ResourcePackage::from_file(&package_path, glacier_game)
     .unwrap_or_else(|e| {
         println!("Failed parse resource package: {}", e);
         std::process::exit(0)

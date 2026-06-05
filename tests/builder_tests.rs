@@ -6,6 +6,7 @@ use rpkg_rs::resource::resource_package::{
 };
 use rpkg_rs::resource::runtime_resource_id::{PlatformTag, RuntimeResourceID};
 use std::str::FromStr;
+use rpkg_rs::{GlacierGame, WoaGame};
 use rpkg_rs::resource::resource_partition::PatchId;
 
 fn test_package_with_resource(
@@ -46,7 +47,7 @@ fn test_package_with_resource(
     };
 
     // Start building the package.
-    let mut builder = PackageBuilder::new(69, ChunkType::Standard);
+    let mut builder = PackageBuilder::new(69, ChunkType::Standard, GlacierGame::Woa(WoaGame::HM3));
 
     // Create a fake resource id and data for the resource.
     let rrid: RuntimeResourceID = RuntimeResourceID::from_resource_id_with_platform(&resource_id, "pc", PlatformTag::None);
@@ -84,10 +85,10 @@ fn test_package_with_resource(
     let package_data = builder.build_to_vec(version)?;
 
     // Now let's try to parse it again.
-    let package = ResourcePackage::from_memory(package_data, is_patch)?;
+    let package = ResourcePackage::from_memory(package_data, is_patch, GlacierGame::Woa(WoaGame::HM3))?;
 
     // Check that its data matches the original.
-    let resource_data = package.read_resource(&rrid).unwrap();
+    let resource_data = package.read_resource(&rrid)?;
     assert_eq!(resource_data, fake_data, "Resource data doesn't match");
 
     // Check that the references are correct and in the right order.

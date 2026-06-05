@@ -1,15 +1,15 @@
 use md5::{Digest, Md5};
 use rpkg_rs::resource::package_builder::PackageBuilder;
 use rpkg_rs::resource::partition_manager::PartitionManager;
-use rpkg_rs::resource::resource_package::ResourcePackageSource;
-use rpkg_rs::WoaVersion;
+use rpkg_rs::resource::resource_package::ResourcePackageDataSource;
+use rpkg_rs::{GlacierGame, WoaGame};
 use std::fs::File;
 use std::path::PathBuf;
 use std::{fs, io};
 
 fn test_game_mounting(
     path_env_var: &str,
-    game_version: WoaVersion,
+    game_version: GlacierGame,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Read game path from env variable
     let game_retail_path = match std::env::var(path_env_var) {
@@ -39,8 +39,8 @@ fn test_game_mounting(
 
                 let data_offset = resource.data_offset();
 
-                match &package.source() {
-                    Some(ResourcePackageSource::File(path)) => {
+                match &package.source().data {
+                    ResourcePackageDataSource::File(path) => {
                         let file = File::open(path)?;
                         let file_size = file.metadata()?.len();
 
@@ -53,7 +53,7 @@ fn test_game_mounting(
                         }
                     }
 
-                    Some(ResourcePackageSource::Memory(buffer)) => {
+                    ResourcePackageDataSource::Memory(buffer) => {
                         let buffer_size = buffer.len();
 
                         if data_offset >= buffer_size as u64 {
@@ -65,7 +65,7 @@ fn test_game_mounting(
                         }
                     }
 
-                    None => {
+                    ResourcePackageDataSource::None => {
                         return Err(format!(
                             "Package '{}' of game '{:?}' has no source",
                             package_name, game_version
@@ -83,24 +83,24 @@ fn test_game_mounting(
 #[test]
 #[ignore]
 fn test_hm2016_mounting() -> Result<(), Box<dyn std::error::Error>> {
-    test_game_mounting("HM2016_PATH", WoaVersion::HM2016)
+    test_game_mounting("HM2016_PATH", GlacierGame::Woa(WoaGame::HM2016))
 }
 
 #[test]
 #[ignore]
 fn test_hm2_mounting() -> Result<(), Box<dyn std::error::Error>> {
-    test_game_mounting("HM2_PATH", WoaVersion::HM2)
+    test_game_mounting("HM2_PATH", GlacierGame::Woa(WoaGame::HM2))
 }
 
 #[test]
 #[ignore]
 fn test_hm3_mounting() -> Result<(), Box<dyn std::error::Error>> {
-    test_game_mounting("HM3_PATH", WoaVersion::HM3)
+    test_game_mounting("HM3_PATH", GlacierGame::Woa(WoaGame::HM3))
 }
 
 fn test_game_rebuild(
     path_env_var: &str,
-    game_version: WoaVersion,
+    game_version: GlacierGame,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Read game path from env variable
     let game_retail_path = match std::env::var(path_env_var) {
@@ -146,8 +146,8 @@ fn test_game_rebuild(
             )?;
 
             // After it's built, check if the generated file is the same as the original.
-            let original_file = match &package.source() {
-                Some(ResourcePackageSource::File(path)) => path,
+            let original_file = match &package.source().data {
+                ResourcePackageDataSource::File(path) => path,
                 _ => Err(format!(
                     "Package '{}' of game '{:?}' has no source",
                     output_name, game_version
@@ -166,14 +166,14 @@ fn test_game_rebuild(
 
             // Hash the files and compare them.
             let original_hash = {
-                let mut file = fs::File::open(original_file)?;
+                let mut file = File::open(original_file)?;
                 let mut hasher = Md5::new();
                 io::copy(&mut file, &mut hasher)?;
                 hasher.finalize()
             };
 
             let generated_hash = {
-                let mut file = fs::File::open(&generated_file)?;
+                let mut file = File::open(&generated_file)?;
                 let mut hasher = Md5::new();
                 io::copy(&mut file, &mut hasher)?;
                 hasher.finalize()
@@ -198,17 +198,17 @@ fn test_game_rebuild(
 #[test]
 #[ignore]
 fn test_hm2016_rebuild() -> Result<(), Box<dyn std::error::Error>> {
-    test_game_rebuild("HM2016_PATH", WoaVersion::HM2016)
+    test_game_rebuild("HM2016_PATH", GlacierGame::Woa(WoaGame::HM2016))
 }
 
 #[test]
 #[ignore]
 fn test_hm2_rebuild() -> Result<(), Box<dyn std::error::Error>> {
-    test_game_rebuild("HM2_PATH", WoaVersion::HM2)
+    test_game_rebuild("HM2_PATH", GlacierGame::Woa(WoaGame::HM2))
 }
 
 #[test]
 #[ignore]
 fn test_hm3_rebuild() -> Result<(), Box<dyn std::error::Error>> {
-    test_game_rebuild("HM3_PATH", WoaVersion::HM3)
+    test_game_rebuild("HM3_PATH", GlacierGame::Woa(WoaGame::HM3))
 }
