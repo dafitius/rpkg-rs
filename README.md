@@ -21,6 +21,7 @@ This crate facilitates parsing of these files, enabling seamless access to the c
 #### Supported File Formats:
 - ResourcePackage v1 (RPKG) files found in Hitman 2016 and Hitman 2.
 - ResourcePackage v2 (RPK2) files found in Hitman 3.
+- ResourcePackage files found in 007 First Light.
 - Various legacy ResourcePackage (RPKG) files found in Hitman 2016 alpha builds
 - PackageDefinitions (packagedefinition.txt) from Hitman 2016, Hitman 2, and Hitman 3, with API support for adding custom parsers.
 
